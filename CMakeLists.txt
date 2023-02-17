@@ -9,7 +9,7 @@ SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 FILE(GLOB_RECURSE SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp ${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp)
 
 FILE(COPY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui-cmake.patch ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/CMakeLists.txt)
-EXECUTE_PROCESS(COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch)
+EXECUTE_PROCESS(COMMAND cmd /C "cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch")
 
 ADD_SUBDIRECTORY(engine)
 ADD_SUBDIRECTORY(libs/glm)
