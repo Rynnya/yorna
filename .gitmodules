@@ -4,6 +4,7 @@
 [submodule "libs/imgui"]
 	path = libs/imgui
 	url = https://github.com/ocornut/imgui
+	ignore = dirty
 [submodule "libs/tinyobjloader"]
 	path = libs/tinyobjloader
 	url = https://github.com/tinyobjloader/tinyobjloader
