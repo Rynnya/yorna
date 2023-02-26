@@ -1,5 +1,7 @@
 #include "light_object.hpp"
 
+#include <utility>
+
 namespace game {
 
     LightObject::LightObject() noexcept : GameObject { createEmptyObject() } {}

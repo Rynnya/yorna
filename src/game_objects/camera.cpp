@@ -7,7 +7,7 @@ namespace game {
     void Camera::setOrthographicProjection(float left, float right, float top, float bottom, float near, float far) {
         projectionMatrix_ = glm::mat4 { 1.0f };
         projectionMatrix_[0][0] = 2.0f / (right - left);
-        projectionMatrix_[1][1] = 2.0f / (bottom - top);
+        projectionMatrix_[1][1] = -2.0f / (bottom - top);
         projectionMatrix_[2][2] = 1.0f / (far - near);
         projectionMatrix_[3][0] = -(right + left) / (right - left);
         projectionMatrix_[3][1] = -(bottom + top) / (bottom - top);
@@ -22,7 +22,7 @@ namespace game {
         const float tanHalfFovy = tan(fovy / 2.0f);
         projectionMatrix_ = glm::mat4 { 0.0f };
         projectionMatrix_[0][0] = 1.0f / (aspect * tanHalfFovy);
-        projectionMatrix_[1][1] = 1.0f / (tanHalfFovy);
+        projectionMatrix_[1][1] = -1.0f / (tanHalfFovy);
         projectionMatrix_[2][2] = far / (far - near);
         projectionMatrix_[2][3] = 1.0f;
         projectionMatrix_[3][2] = -(far * near) / (far - near);

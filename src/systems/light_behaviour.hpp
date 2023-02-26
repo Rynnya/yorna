@@ -1,6 +1,8 @@
 #ifndef GAME_LIGHT_BEHAVIOUR
 #define GAME_LIGHT_BEHAVIOUR
 
+#include <coffee/engine.hpp>
+
 #include "../game_objects/light_object.hpp"
 #include "structs.hpp"
 
@@ -28,7 +30,7 @@ namespace game {
         void createDescriptorSet();
         void createPipeline(const coffee::RenderPass& renderPass);
 
-        std::vector<LightObject> lights;
+        LightObject light;
         LightPushConstants constants {};
 
         coffee::DescriptorLayout layout;
@@ -36,7 +38,6 @@ namespace game {
         coffee::Pipeline pipeline;
 
         coffee::Buffer mvpBuffer;
-        coffee::Buffer lightBuffer;
 
         coffee::Engine& engine;
     };

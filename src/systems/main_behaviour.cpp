@@ -1,5 +1,6 @@
 #include "main_behaviour.hpp"
 
+#include <coffee/objects/vertex.hpp>
 #include <coffee/engine.hpp>
 
 #include <imgui.h>
@@ -11,29 +12,16 @@ namespace game {
     MainSystem::MainSystem(
         coffee::Engine& engine,
         const coffee::RenderPass& renderPass
-    ) : engine { engine } {
-        createDescriptorLayout();
+    )  : engine { engine } {
+        createTextureSampler();
         createBuffers();
-        createDescriptorSet();
+        loadModels();
+        createDescriptors();
         createPipeline(renderPass);
 
         const size_t presentImagesSize = engine.getPresentImages().size();
         StaticObjects::mvpUniformBuffers.resize(presentImagesSize);
         StaticObjects::lightUniformBuffers.resize(presentImagesSize);
-
-        smoothVase = ModelObject::createModelObject(createModel("models/smooth_vase.obj"));
-        smoothVase.transform.translation = { 0.5f, 0.5f, 0.0f };
-        smoothVase.transform.scale = { 2.5f, 1.0f, 2.5f };
-
-        flatVase = ModelObject::createModelObject(createModel("models/flat_vase.obj"));
-        flatVase.transform.translation = { -0.5f, 0.5f, 0.0f };
-        flatVase.transform.scale = { 2.5f, 1.0f, 2.5f };
-
-        floor = ModelObject::createModelObject(createModel("models/quad.obj"));
-        floor.transform.translation = { 0.0f, 0.5f, 0.0f };
-        floor.transform.scale = { 3.0f, 1.0f, 3.0f };
-
-        viewerObject.transform.translation.z = -2.5f;
 
         engine.addMouseClickCallback("main", [&](const coffee::MouseClickEvent& e) {
             if (e.getButton() == coffee::MouseButton::Right) {
@@ -49,7 +37,7 @@ namespace game {
 
             const float lookDistance = lookSpeed * engine.getDeltaTime();
             viewerObject.transform.rotation.x =
-                glm::clamp(viewerObject.transform.rotation.x + lookDistance * (engine.getMouseY() - e.getY()), -1.5f, 1.5f);
+                glm::clamp(viewerObject.transform.rotation.x + lookDistance * (e.getY() - engine.getMouseY()), -1.5f, 1.5f);
             viewerObject.transform.rotation.y =
                 glm::mod(viewerObject.transform.rotation.y + lookDistance * (e.getX() - engine.getMouseX()), glm::two_pi<float>());
         });
@@ -94,7 +82,7 @@ namespace game {
 
         const glm::vec3 forwardDir { sin(yaw), 0.0f, cos(yaw) };
         const glm::vec3 rightDir { forwardDir.z, 0.0f, -forwardDir.x };
-        const glm::vec3 upDir { 0.0f, -1.0f, 0.0f };
+        const glm::vec3 upDir { 0.0f, 1.0f, 0.0f };
 
         glm::vec3 moveDir { 0.0f };
         if (engine.isButtonPressed(coffee::Keys::S)) moveDir -= forwardDir;
@@ -109,7 +97,11 @@ namespace game {
         }
 
         camera.setViewYXZ(viewerObject.transform.translation, viewerObject.transform.rotation);
-        camera.setPerspectiveProjection(glm::radians(50.0f), static_cast<float>(engine.getFramebufferWidth()) / engine.getFramebufferHeight());
+        camera.setPerspectiveProjection(
+            glm::radians(80.0f), 
+            static_cast<float>(engine.getFramebufferWidth()) / engine.getFramebufferHeight(), 
+            0.1f,
+            1000.0f);
 
         auto& mvp = StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()];
         mvp.projection = camera.getProjection();
@@ -118,33 +110,33 @@ namespace game {
     }
 
     void MainSystem::render(const coffee::CommandBuffer& commandBuffer) {
-        commandBuffer->bindDescriptorSets(pipeline, descriptorSet);
         commandBuffer->bindPipeline(pipeline);
         commandBuffer->setViewport(engine.getFramebufferWidth(), engine.getFramebufferHeight());
         commandBuffer->setScissor(engine.getFramebufferWidth(), engine.getFramebufferHeight());
 
-        std::memcpy(mvpBuffer->map(), &StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()], sizeof(MVPUniformBuffer));
+        mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
         mvpBuffer->flush();
-        std::memcpy(lightBuffer->map(), &StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()], sizeof(LightUniformBuffer));
+        lightBuffer->write(StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()]);
         lightBuffer->flush();
 
-        constants.transform = flatVase.transform.mat4();
-        constants.normal = flatVase.transform.normal();
+        constants.transform = sponzaModel->transform.mat4();
+        constants.normal = sponzaModel->transform.normal();
         commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, constants);
-        drawModel(commandBuffer, flatVase);
 
-        constants.transform = smoothVase.transform.mat4();
-        constants.normal = smoothVase.transform.normal();
-        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, constants);
-        drawModel(commandBuffer, smoothVase);
-
-        constants.transform = floor.transform.mat4();
-        constants.normal = floor.transform.normal();
-        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, constants);
-        drawModel(commandBuffer, floor);
+        const auto& meshes = sponzaModel->model->meshes;
+        for (size_t i = 0; i < meshes.size(); i++) {
+            commandBuffer->bindDescriptorSets({ descriptorSet, sponzaModel->descriptors[i] });
+            meshes[i]->draw(commandBuffer);
+        }
     }
 
-    void MainSystem::createDescriptorLayout() {
+    void MainSystem::loadModels() {
+        sponzaModel = std::make_unique<Model>(engine, "models/sponza_scene.glb", TransformComponent {}, textureSampler);
+
+        viewerObject.transform.translation.z = -2.5f;
+    }
+
+    void MainSystem::createDescriptors() {
         std::map<uint32_t, coffee::DescriptorBindingInfo> bindings {};
         coffee::DescriptorBindingInfo binding {};
 
@@ -157,12 +149,13 @@ namespace game {
         bindings[1] = binding;
 
         layout = engine.createDescriptorLayout(bindings);
+        descriptorSet = engine.createDescriptorSet(coffee::DescriptorWriter(layout).addBuffer(0, mvpBuffer).addBuffer(1, lightBuffer));
     }
 
     void MainSystem::createBuffers() {
         coffee::BufferConfiguration configuration {};
         configuration.usage = coffee::BufferUsage::Uniform;
-        configuration.properties = coffee::MemoryProperty::HostVisible | coffee::MemoryProperty::HostCoherent;
+        configuration.properties = coffee::MemoryProperty::HostVisible;
         configuration.instanceCount = 1U;
 
         configuration.instanceSize = sizeof(MVPUniformBuffer);
@@ -172,11 +165,19 @@ namespace game {
         lightBuffer = engine.createBuffer(configuration);
     }
 
-    void MainSystem::createDescriptorSet() {
-        descriptorSet = engine.createDescriptorSet(
-            coffee::DescriptorWriter(layout)
-                .addBuffer(0, mvpBuffer)
-                .addBuffer(1, lightBuffer));
+    void MainSystem::createTextureSampler() {
+        coffee::SamplerConfiguration textureSamplerConfiguration {};
+        textureSamplerConfiguration.magFilter = coffee::SamplerFilter::Linear;
+        textureSamplerConfiguration.minFilter = coffee::SamplerFilter::Linear;
+        textureSamplerConfiguration.mipmapMode = coffee::SamplerFilter::Linear;
+        textureSamplerConfiguration.addressModeU = coffee::AddressMode::Repeat;
+        textureSamplerConfiguration.addressModeV = coffee::AddressMode::Repeat;
+        textureSamplerConfiguration.addressModeW = coffee::AddressMode::Repeat;
+        textureSamplerConfiguration.anisotropyEnable = true;
+        textureSamplerConfiguration.maxAnisotropy = 256U; // Set to huge value that will be rounded down to device maximum
+        textureSamplerConfiguration.compareOp = coffee::CompareOp::Always;
+        textureSamplerConfiguration.borderColor = coffee::BorderColor::OpaqueBlack;
+        textureSampler = engine.createSampler(textureSamplerConfiguration);
     }
 
     void MainSystem::createPipeline(const coffee::RenderPass& renderPass) {
@@ -231,25 +232,9 @@ namespace game {
         configuration.depthStencilInfo.backFace = {};
 
         configuration.inputBindings.push_back(
-            { 0U, sizeof(Model::Vertex), coffee::InputRate::PerVertex, Model::Vertex::getElementDescriptions() });
+            { 0U, sizeof(coffee::Vertex), coffee::InputRate::PerVertex, coffee::Vertex::getElementDescriptions() });
 
-        pipeline = engine.createPipeline(renderPass, pushConstants, { layout }, program, configuration);
-    }
-
-    std::shared_ptr<Model> MainSystem::createModel(const std::string& filePath) {
-        return std::make_shared<Model>(engine, filePath);
-    }
-
-    void MainSystem::drawModel(const coffee::CommandBuffer& commandBuffer, const ModelObject& model) {
-        commandBuffer->bindVertexBuffer(model.model_->vertexBuffer);
-
-        if (model.model_->indexBuffer == nullptr) {
-            commandBuffer->draw(model.model_->vertexCount);
-            return;
-        }
-
-        commandBuffer->bindIndexBuffer(model.model_->indexBuffer);
-        commandBuffer->drawIndexed(model.model_->indexCount);
+        pipeline = engine.createPipeline(renderPass, pushConstants, { layout, sponzaModel->layout }, program, configuration);
     }
 
 }

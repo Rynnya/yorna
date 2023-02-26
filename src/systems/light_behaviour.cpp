@@ -6,13 +6,14 @@
 
 namespace game {
 
-    std::vector<glm::vec3> lightColors {
-        {1.f, .1f, .1f},
-        {.1f, .1f, 1.f},
-        {.1f, 1.f, .1f},
-        {1.f, 1.f, .1f},
-        {.1f, 1.f, 1.f},
-        {1.f, 1.f, 1.f} 
+    std::vector<glm::vec4> lightColors {
+        {1.f, 1.f, 1.f, 4.f},
+        //{1.f, .1f, .1f, 0.2f},
+        //{.1f, .1f, 1.f, 0.2f},
+        //{.1f, 1.f, .1f, 0.2f},
+        //{1.f, 1.f, .1f, 0.2f},
+        //{.1f, 1.f, 1.f, 0.2f},
+        //{1.f, 1.f, 1.f, 0.2f}
     };
 
     LightPointSystem::LightPointSystem(
@@ -24,12 +25,12 @@ namespace game {
         createDescriptorSet();
         createPipeline(renderPass);
 
-        for (size_t i = 0; i < lightColors.size(); i++) {
-            LightObject& object = lights.emplace_back(LightObject::createLightObject(0.2f));
-            object.color = lightColors[i];
-            auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, (i * glm::two_pi<float>()) / lightColors.size(), { 0.0f, -1.0f, 0.0f });
-            object.transform.translation = glm::vec3(rotateLight * glm::vec4 { -1.0f, -1.0f, -1.0f, 1.0f });
+        for (auto& currentLightBuffer : StaticObjects::lightUniformBuffers) {
+            currentLightBuffer.lightPoint.position = { -1.0f, 1.0f, -1.0f, 1.0f }; // w component is ignored
+            currentLightBuffer.lightPoint.color = { 1.0f, 1.0f, 1.0f, 4.0f }; // rgb and w component as intensity
         }
+
+        light.transform.scale.r = 0.2f;
     }
 
     LightPointSystem::~LightPointSystem() {
@@ -37,40 +38,36 @@ namespace game {
     }
 
     void LightPointSystem::update() {
-        auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, engine.getDeltaTime(), { 0.0f, -1.0f, 0.0f });
-        LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
+        //auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, engine.getDeltaTime(), { 0.0f, -1.0f, 0.0f });
+        //LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
 
-        for (size_t i = 0; i < lights.size(); i++) {
-            lights[i].transform.translation = glm::vec3(rotateLight * glm::vec4 { lights[i].transform.translation, 1.0f });
+        //for (size_t i = 0; i < lights.size(); i++) {
+        //    lights[i].transform.translation = glm::vec3(rotateLight * glm::vec4 { lights[i].transform.translation, 1.0f });
 
-            currentLightBuffer.lightPoints[i].position = glm::vec4(lights[i].transform.translation, 1.0f);
-            currentLightBuffer.lightPoints[i].color = glm::vec4(lights[i].color, lights[i].intensity);
-        }
+        //    currentLightBuffer.lightPoints[i].position = glm::vec4(lights[i].transform.translation, 1.0f);
+        //    currentLightBuffer.lightPoints[i].color = glm::vec4(lights[i].color, lights[i].intensity);
+        //}
 
-        currentLightBuffer.length = static_cast<uint32_t>(lights.size());
+        //currentLightBuffer.length = static_cast<uint32_t>(lights.size());
     }
 
     void LightPointSystem::render(const coffee::CommandBuffer& commandBuffer) {
         LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
 
-        commandBuffer->bindDescriptorSets(pipeline, descriptorSet);
         commandBuffer->bindPipeline(pipeline);
+        commandBuffer->bindDescriptorSet(descriptorSet);
         commandBuffer->setViewport(engine.getFramebufferWidth(), engine.getFramebufferHeight());
         commandBuffer->setScissor(engine.getFramebufferWidth(), engine.getFramebufferHeight());
 
-        std::memcpy(mvpBuffer->map(), &StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()], sizeof(MVPUniformBuffer));
+        mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
         mvpBuffer->flush();
-        std::memcpy(lightBuffer->map(), &currentLightBuffer, sizeof(LightUniformBuffer));
-        lightBuffer->flush();
 
-        for (size_t i = 0; i < lights.size(); i++) {
-            constants.position = currentLightBuffer.lightPoints[i].position;
-            constants.color = currentLightBuffer.lightPoints[i].color;
-            constants.radius = lights[i].transform.scale.r;
+        constants.position = currentLightBuffer.lightPoint.position;
+        constants.color = currentLightBuffer.lightPoint.color;
+        constants.radius = light.transform.scale.r;
 
-            commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, constants);
-            commandBuffer->draw(6);
-        }
+        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, constants);
+        commandBuffer->draw(6);
     }
 
     void LightPointSystem::createDescriptorLayout() {
@@ -81,31 +78,21 @@ namespace game {
         binding.stages = coffee::ShaderStage::All;
         bindings[0] = binding;
 
-        binding.type = coffee::DescriptorType::UniformBuffer;
-        binding.stages = coffee::ShaderStage::Fragment;
-        bindings[1] = binding;
-
         layout = engine.createDescriptorLayout(bindings);
     }
 
     void LightPointSystem::createBuffers() {
         coffee::BufferConfiguration configuration {};
         configuration.usage = coffee::BufferUsage::Uniform;
-        configuration.properties = coffee::MemoryProperty::HostVisible | coffee::MemoryProperty::HostCoherent;
+        configuration.properties = coffee::MemoryProperty::HostVisible;
         configuration.instanceCount = 1U;
 
         configuration.instanceSize = sizeof(MVPUniformBuffer);
         mvpBuffer = engine.createBuffer(configuration);
-
-        configuration.instanceSize = sizeof(LightUniformBuffer);
-        lightBuffer = engine.createBuffer(configuration);
     }
 
     void LightPointSystem::createDescriptorSet() {
-        descriptorSet = engine.createDescriptorSet(
-            coffee::DescriptorWriter(layout)
-                .addBuffer(0, mvpBuffer)
-                .addBuffer(1, lightBuffer));
+        descriptorSet = engine.createDescriptorSet(coffee::DescriptorWriter(layout).addBuffer(0, mvpBuffer));
     }
 
     void LightPointSystem::createPipeline(const coffee::RenderPass& renderPass) {

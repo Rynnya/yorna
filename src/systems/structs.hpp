@@ -24,8 +24,7 @@ namespace game {
     };
 
     struct LightUniformBuffer {
-        LightPoint lightPoints[amountOfLightPoints];
-        uint32_t length;
+        LightPoint lightPoint {};
     };
 
     class StaticObjects {

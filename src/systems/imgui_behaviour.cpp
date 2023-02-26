@@ -534,7 +534,7 @@ namespace game {
             if (vertexBuffer == nullptr || vertexBuffer->getTotalSize() < vertexSize) {
                 coffee::BufferConfiguration configuration {};
                 configuration.usage = coffee::BufferUsage::Vertex;
-                configuration.properties = coffee::MemoryProperty::HostVisible | coffee::MemoryProperty::HostCoherent;
+                configuration.properties = coffee::MemoryProperty::HostVisible;
                 configuration.instanceCount = data->TotalVtxCount;
                 configuration.instanceSize = sizeof(ImDrawVert);
                 vertexBuffer = engine.createBuffer(configuration);
@@ -543,7 +543,7 @@ namespace game {
             if (indexBuffer == nullptr || indexBuffer->getTotalSize() < indexSize) {
                 coffee::BufferConfiguration configuration {};
                 configuration.usage = coffee::BufferUsage::Index;
-                configuration.properties = coffee::MemoryProperty::HostVisible | coffee::MemoryProperty::HostCoherent;
+                configuration.properties = coffee::MemoryProperty::HostVisible;
                 configuration.instanceCount = data->TotalIdxCount;
                 configuration.instanceSize = sizeof(ImDrawIdx);
                 indexBuffer = engine.createBuffer(configuration);
@@ -555,14 +555,8 @@ namespace game {
             for (size_t i = 0; i < data->CmdListsCount; i++) {
                 const ImDrawList* list = data->CmdLists[i];
 
-                std::memcpy(
-                    vertexBuffer->map(std::numeric_limits<uint64_t>::max(), vertexOffset),
-                    list->VtxBuffer.Data,
-                    list->VtxBuffer.Size * sizeof(ImDrawVert));
-                std::memcpy(
-                    indexBuffer->map(std::numeric_limits<uint64_t>::max(), indexOffset),
-                    list->IdxBuffer.Data,
-                    list->IdxBuffer.Size * sizeof(ImDrawIdx));
+                vertexBuffer->write(list->VtxBuffer.Data, list->VtxBuffer.Size * sizeof(ImDrawVert), vertexOffset);
+                indexBuffer->write(list->IdxBuffer.Data, list->IdxBuffer.Size * sizeof(ImDrawIdx), indexOffset);
 
                 vertexOffset += list->VtxBuffer.Size * sizeof(ImDrawVert);
                 indexOffset += list->IdxBuffer.Size * sizeof(ImDrawIdx);
@@ -576,7 +570,7 @@ namespace game {
         }
 
         commandBuffer->bindPipeline(pipeline);
-        commandBuffer->bindDescriptorSets(pipeline, descriptorSet);
+        commandBuffer->bindDescriptorSet(descriptorSet);
 
         commandBuffer->setViewport(framebufferWidth, framebufferHeight);
 
@@ -617,7 +611,7 @@ namespace game {
                 }
 
                 if (command.TextureId != nullptr) {
-                    commandBuffer->bindDescriptorSets(pipeline, *reinterpret_cast<coffee::DescriptorSet*>(command.TextureId));
+                    commandBuffer->bindDescriptorSet(*reinterpret_cast<coffee::DescriptorSet*>(command.TextureId));
                 }
 
                 commandBuffer->setScissor(clipMax.x - clipMin.x, clipMax.y - clipMin.y, clipMin.x, clipMin.y);
@@ -625,7 +619,7 @@ namespace game {
 
                 // We must restore default descriptor set
                 if (command.TextureId != nullptr) {
-                    commandBuffer->bindDescriptorSets(pipeline, descriptorSet);
+                    commandBuffer->bindDescriptorSet(descriptorSet);
                 }
             }
 
@@ -676,7 +670,7 @@ namespace game {
         stagingBufferConfiguration.instanceSize = bytesPerPixel * width * height;
 
         coffee::Buffer staging = engine.createBuffer(stagingBufferConfiguration);
-        std::memcpy(staging->map(), fontPixels, bytesPerPixel * width * height);
+        staging->write(fontPixels, bytesPerPixel * width * height);
 
         engine.copyBufferToImage(fonts, staging);
     }

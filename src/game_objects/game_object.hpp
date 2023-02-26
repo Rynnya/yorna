@@ -1,8 +1,6 @@
 #ifndef GAME_OBJECT
 #define GAME_OBJECT
 
-#include "../systems/model.hpp"
-
 #include <coffee/utils/non_copyable.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -12,7 +10,7 @@ namespace game {
     struct TransformComponent {
         glm::vec3 translation {};
         glm::vec3 scale { 1.0f, 1.0f, 1.0f };
-        glm::vec3 rotation;
+        glm::vec3 rotation {};
 
         glm::mat4 mat4() const noexcept;
         glm::mat3 normal() const noexcept;

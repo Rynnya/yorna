@@ -15,11 +15,6 @@ layout (set = 0, binding = 0) uniform MVPUBO {
     vec4 ambientLightColor;
 } mvpUbo;
 
-layout (set = 0, binding = 1) uniform LightUBO {
-    PointLight lightPoints[10];
-    uint len;
-} lightUbo;
-
 layout (push_constant) uniform Push {
     vec4 position;
     vec4 color;

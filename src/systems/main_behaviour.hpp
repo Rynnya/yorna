@@ -4,12 +4,12 @@
 #include <coffee/engine.hpp>
 
 #include "../game_objects/camera.hpp"
-#include "../game_objects/model_object.hpp"
+#include "../game_objects/game_object.hpp"
+#include "../game_objects/model.hpp"
 
 namespace game {
 
     class MainSystem {
-        friend class Model;
     public:
         struct MainPushConstants {
             glm::mat4 transform { 1.0f };
@@ -25,29 +25,29 @@ namespace game {
         void render(const coffee::CommandBuffer& commandBuffer);
 
     private:
-        void createDescriptorLayout();
+        void loadModels();
+        void createDescriptors();
         void createBuffers();
-        void createDescriptorSet();
+        void createTextureSampler();
         void createPipeline(const coffee::RenderPass& renderPass);
-
-        std::shared_ptr<Model> createModel(const std::string& filePath);
-        static void drawModel(const coffee::CommandBuffer& commandBuffer, const ModelObject& model);
 
         Camera camera {};
         GameObject viewerObject { GameObject::createGameObject() };
 
         const float lookSpeed = 0.13f;
-        const float moveSpeed = 2.0f;
-        ModelObject flatVase, smoothVase, floor;
+        const float moveSpeed = 10.0f;
+        UModel sponzaModel, backpackModel;
 
         MainPushConstants constants {};
 
         coffee::DescriptorLayout layout;
         coffee::DescriptorSet descriptorSet;
+        coffee::DescriptorSet nullTextureDescriptor;
         coffee::Pipeline pipeline;
 
         coffee::Buffer mvpBuffer;
         coffee::Buffer lightBuffer;
+        coffee::Sampler textureSampler;
 
         coffee::Engine& engine;
     };
