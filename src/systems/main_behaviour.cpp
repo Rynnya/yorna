@@ -9,19 +9,30 @@
 
 namespace game {
 
-    MainSystem::MainSystem(
-        coffee::Engine& engine,
-        const coffee::RenderPass& renderPass
-    )  : engine { engine } {
-        createTextureSampler();
+    MainSystem::MainSystem(coffee::Engine& engine) : engine { engine } {
+        createSamplers();
         createBuffers();
         loadModels();
+        createImages();
         createDescriptors();
-        createPipeline(renderPass);
+        createRenderPasses();
+        createFramebuffer();
+        createPipelines();
+
+        engine.addWindowResizeCallback("main", [this](const coffee::ResizeEvent&) {
+            createImages();
+            createFramebuffer();
+            updateDescriptors();
+        });
 
         const size_t presentImagesSize = engine.getPresentImages().size();
         StaticObjects::mvpUniformBuffers.resize(presentImagesSize);
         StaticObjects::lightUniformBuffers.resize(presentImagesSize);
+
+        for (auto& currentLightBuffer : StaticObjects::lightUniformBuffers) {
+            currentLightBuffer.lightPoint.position = { -1.0f, 1.0f, -1.0f, 1.0f }; // w component is ignored
+            currentLightBuffer.lightPoint.color = { 1.0f, 1.0f, 1.0f, 4.0f }; // rgb and w component as intensity
+        }
 
         engine.addMouseClickCallback("main", [&](const coffee::MouseClickEvent& e) {
             if (e.getButton() == coffee::MouseButton::Right) {
@@ -73,7 +84,11 @@ namespace game {
         engine.removeMouseClickCallback("main");
     }
 
-    void MainSystem::update() {
+    void MainSystem::performDepthPass() {
+
+    }
+
+    void MainSystem::updateObjects() {
         if (engine.isTextMode()) {
             return;
         }
@@ -109,19 +124,33 @@ namespace game {
         mvp.inverseView = camera.getInverseView();
     }
 
-    void MainSystem::render(const coffee::CommandBuffer& commandBuffer) {
-        commandBuffer->bindPipeline(pipeline);
-        commandBuffer->setViewport(engine.getFramebufferWidth(), engine.getFramebufferHeight());
-        commandBuffer->setScissor(engine.getFramebufferWidth(), engine.getFramebufferHeight());
+    void MainSystem::updateLightPoints() {
+        //auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, engine.getDeltaTime(), { 0.0f, -1.0f, 0.0f });
+        //LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
+
+        //for (size_t i = 0; i < lights.size(); i++) {
+        //    lights[i].transform.translation = glm::vec3(rotateLight * glm::vec4 { lights[i].transform.translation, 1.0f });
+
+        //    currentLightBuffer.lightPoints[i].position = glm::vec4(lights[i].transform.translation, 1.0f);
+        //    currentLightBuffer.lightPoints[i].color = glm::vec4(lights[i].color, lights[i].intensity);
+        //}
+
+        //currentLightBuffer.length = static_cast<uint32_t>(lights.size());
+    }
+
+    void MainSystem::renderObjects(const coffee::CommandBuffer& commandBuffer) {
+        commandBuffer->bindPipeline(mainPipeline);
+        commandBuffer->setViewport({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
+        commandBuffer->setScissor({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
 
         mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
         mvpBuffer->flush();
         lightBuffer->write(StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()]);
         lightBuffer->flush();
 
-        constants.transform = sponzaModel->transform.mat4();
-        constants.normal = sponzaModel->transform.normal();
-        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, constants);
+        mainConstants.transform = sponzaModel->transform.mat4();
+        mainConstants.normal = sponzaModel->transform.normal();
+        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, mainConstants);
 
         const auto& meshes = sponzaModel->model->meshes;
         for (size_t i = 0; i < meshes.size(); i++) {
@@ -130,30 +159,59 @@ namespace game {
         }
     }
 
-    void MainSystem::loadModels() {
-        sponzaModel = std::make_unique<Model>(engine, "models/sponza_scene.glb", TransformComponent {}, textureSampler);
+    void MainSystem::renderLightPoints(const coffee::CommandBuffer& commandBuffer) {
+        LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
 
-        viewerObject.transform.translation.z = -2.5f;
+        commandBuffer->bindPipeline(lightPointsPipeline);
+        commandBuffer->bindDescriptorSet(descriptorSet);
+        commandBuffer->setViewport({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
+        commandBuffer->setScissor({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
+
+        mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
+        mvpBuffer->flush();
+
+        lightPointsConstants.position = currentLightBuffer.lightPoint.position;
+        lightPointsConstants.color = currentLightBuffer.lightPoint.color;
+        lightPointsConstants.radius = 0.2f;
+
+        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, lightPointsConstants);
+        commandBuffer->draw(6);
     }
 
-    void MainSystem::createDescriptors() {
-        std::map<uint32_t, coffee::DescriptorBindingInfo> bindings {};
-        coffee::DescriptorBindingInfo binding {};
+    void MainSystem::beginRenderPass(const coffee::CommandBuffer& commandBuffer) {
+        commandBuffer->beginRenderPass(renderPass, framebuffer, { engine.getFramebufferWidth(), engine.getFramebufferHeight() });
+    }
 
-        binding.type = coffee::DescriptorType::UniformBuffer;
-        binding.stages = coffee::ShaderStage::All;
-        bindings[0] = binding;
+    void MainSystem::endRenderPass(const coffee::CommandBuffer& commandBuffer) {
+        commandBuffer->endRenderPass();
+    }
 
-        binding.type = coffee::DescriptorType::UniformBuffer;
-        binding.stages = coffee::ShaderStage::Fragment;
-        bindings[1] = binding;
+    void MainSystem::createSamplers() {
+        coffee::SamplerConfiguration textureSamplerConfiguration {};
+        textureSamplerConfiguration.magFilter = coffee::SamplerFilter::Linear;
+        textureSamplerConfiguration.minFilter = coffee::SamplerFilter::Linear;
+        textureSamplerConfiguration.mipmapMode = coffee::SamplerFilter::Linear;
+        textureSamplerConfiguration.anisotropyEnable = true;
+        textureSamplerConfiguration.maxAnisotropy = 256U; // Set to huge value that will be rounded down to device maximum
+        textureSamplerConfiguration.compareOp = coffee::CompareOp::Always;
+        textureSamplerConfiguration.borderColor = coffee::BorderColor::OpaqueBlack;
+        textureSampler = engine.createSampler(textureSamplerConfiguration);
 
-        layout = engine.createDescriptorLayout(bindings);
-        descriptorSet = engine.createDescriptorSet(coffee::DescriptorWriter(layout).addBuffer(0, mvpBuffer).addBuffer(1, lightBuffer));
+        coffee::SamplerConfiguration samplerConfiguration {};
+        samplerConfiguration.magFilter = coffee::SamplerFilter::Linear;
+        samplerConfiguration.minFilter = coffee::SamplerFilter::Linear;
+        samplerConfiguration.mipmapMode = coffee::SamplerFilter::Linear;
+        samplerConfiguration.addressModeU = coffee::AddressMode::ClampToEdge;
+        samplerConfiguration.addressModeV = coffee::AddressMode::ClampToEdge;
+        samplerConfiguration.addressModeW = coffee::AddressMode::ClampToEdge;
+        samplerConfiguration.borderColor = coffee::BorderColor::OpaqueWhite;
+        samplerConfiguration.minLod = 0.0f;
+        samplerConfiguration.maxLod = 1.0f;
+        outputSampler = engine.createSampler(samplerConfiguration);
     }
 
     void MainSystem::createBuffers() {
-        coffee::BufferConfiguration configuration {};
+        coffee::BufferConfiguration configuration{};
         configuration.usage = coffee::BufferUsage::Uniform;
         configuration.properties = coffee::MemoryProperty::HostVisible;
         configuration.instanceCount = 1U;
@@ -165,76 +223,130 @@ namespace game {
         lightBuffer = engine.createBuffer(configuration);
     }
 
-    void MainSystem::createTextureSampler() {
-        coffee::SamplerConfiguration textureSamplerConfiguration {};
-        textureSamplerConfiguration.magFilter = coffee::SamplerFilter::Linear;
-        textureSamplerConfiguration.minFilter = coffee::SamplerFilter::Linear;
-        textureSamplerConfiguration.mipmapMode = coffee::SamplerFilter::Linear;
-        textureSamplerConfiguration.addressModeU = coffee::AddressMode::Repeat;
-        textureSamplerConfiguration.addressModeV = coffee::AddressMode::Repeat;
-        textureSamplerConfiguration.addressModeW = coffee::AddressMode::Repeat;
-        textureSamplerConfiguration.anisotropyEnable = true;
-        textureSamplerConfiguration.maxAnisotropy = 256U; // Set to huge value that will be rounded down to device maximum
-        textureSamplerConfiguration.compareOp = coffee::CompareOp::Always;
-        textureSamplerConfiguration.borderColor = coffee::BorderColor::OpaqueBlack;
-        textureSampler = engine.createSampler(textureSamplerConfiguration);
+    void MainSystem::loadModels() {
+        sponzaModel = std::make_unique<Model>(engine, "models/sponza_scene.glb", TransformComponent {}, textureSampler);
+
+        viewerObject.transform.translation.z = -2.5f;
     }
 
-    void MainSystem::createPipeline(const coffee::RenderPass& renderPass) {
-        coffee::PushConstants pushConstants {};
+    void MainSystem::createRenderPasses() {
+        coffee::RenderPassConfiguration renderPassConfiguration {};
+        coffee::AttachmentConfiguration depthStencilAttachment {};
 
-        pushConstants
+        auto& colorAttachment = renderPassConfiguration.colorAttachments.emplace_back();
+
+        colorAttachment.sampleCount = 1U;
+        colorAttachment.initialState = coffee::ResourceState::Undefined;
+        colorAttachment.finalState = coffee::ResourceState::ShaderResource;
+        colorAttachment.format = engine.getColorFormat();
+        colorAttachment.loadOp = coffee::AttachmentLoadOp::Clear;
+        colorAttachment.storeOp = coffee::AttachmentStoreOp::Store;
+        colorAttachment.stencilLoadOp = coffee::AttachmentLoadOp::DontCare;
+        colorAttachment.stencilStoreOp = coffee::AttachmentStoreOp::DontCare;
+        colorAttachment.clearValue = std::array<float, 4> { 0.01f, 0.01f, 0.01f, 1.0f };
+
+        depthStencilAttachment.initialState = coffee::ResourceState::Undefined;
+        depthStencilAttachment.finalState = coffee::ResourceState::DepthWrite;
+        depthStencilAttachment.format = engine.getDepthFormat();
+        depthStencilAttachment.loadOp = coffee::AttachmentLoadOp::Clear;
+        depthStencilAttachment.storeOp = coffee::AttachmentStoreOp::DontCare;
+        depthStencilAttachment.stencilLoadOp = coffee::AttachmentLoadOp::DontCare;
+        depthStencilAttachment.stencilStoreOp = coffee::AttachmentStoreOp::DontCare;
+        depthStencilAttachment.depthStencilClearValue = coffee::ClearDepthStencilValue { 1.0f, 0U };
+
+        renderPassConfiguration.depthStencilAttachment = depthStencilAttachment;
+
+        renderPass = engine.createRenderPass(renderPassConfiguration);
+    }
+
+    void MainSystem::createPipelines() {
+        coffee::PushConstants mainPushConstants {};
+        coffee::ShaderProgram mainProgram {};
+        coffee::PushConstants lightPointsConstants {};
+        coffee::ShaderProgram lightPointsProgram {};
+
+        mainPushConstants
             .addRange(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment)
             .addObject<MainPushConstants>();
 
-        coffee::ShaderProgram program {};
-        program.addVertexShader(engine.createShader("shaders/base.vert.spv", coffee::ShaderStage::Vertex));
-        program.addFragmentShader(engine.createShader("shaders/base.frag.spv", coffee::ShaderStage::Fragment));
+        lightPointsConstants
+            .addRange(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment)
+            .addObject<LightPushConstants>();
 
-        coffee::PipelineConfiguration configuration {};
+        mainProgram
+            .addVertexShader(engine.createShader("shaders/base.vert.spv", coffee::ShaderStage::Vertex))
+            .addFragmentShader(engine.createShader("shaders/base.frag.spv", coffee::ShaderStage::Fragment));
 
-        configuration.inputAssembly.topology = coffee::Topology::Triangle;
-        configuration.inputAssembly.primitiveRestartEnable = false;
+        lightPointsProgram
+            .addVertexShader(engine.createShader("shaders/point_light.vert.spv", coffee::ShaderStage::Vertex))
+            .addFragmentShader(engine.createShader("shaders/point_light.frag.spv", coffee::ShaderStage::Fragment));
 
-        configuration.rasterizationInfo.fillMode = coffee::PolygonMode::Solid;
-        configuration.rasterizationInfo.cullMode = coffee::CullMode::None;
-        configuration.rasterizationInfo.frontFace = coffee::FrontFace::Clockwise;
-        configuration.rasterizationInfo.depthBiasEnable = false;
-        configuration.rasterizationInfo.depthBiasConstantFactor = 0.0f;
-        configuration.rasterizationInfo.depthBiasClamp = 0.0f;
-        configuration.rasterizationInfo.depthBiasSlopeFactor = 0.0f;
+        mainPipeline = engine.createPipeline(renderPass, mainPushConstants, { layout, sponzaModel->layout }, mainProgram, []() {
+            coffee::PipelineConfiguration configuration {};
 
-        configuration.multisampleInfo.sampleRateShading = false;
-        configuration.multisampleInfo.sampleCount = 1U;
-        configuration.multisampleInfo.minSampleShading = 1.0f;
-        configuration.multisampleInfo.alphaToCoverage = false;
+            configuration.inputBindings.push_back(
+                { 0U, sizeof(coffee::Vertex), coffee::InputRate::PerVertex, coffee::Vertex::getElementDescriptions() });
 
-        configuration.colorBlendAttachment.blendEnable = false;
-        configuration.colorBlendAttachment.colorWriteMask =
-            coffee::ColorComponent::Red   |
-            coffee::ColorComponent::Green |
-            coffee::ColorComponent::Blue  |
-            coffee::ColorComponent::Alpha ;
-        configuration.colorBlendAttachment.srcBlend = coffee::BlendFactor::One;
-        configuration.colorBlendAttachment.dstBlend = coffee::BlendFactor::Zero;
-        configuration.colorBlendAttachment.blendOp = coffee::BlendOp::Add;
-        configuration.colorBlendAttachment.alphaSrcBlend = coffee::BlendFactor::One;
-        configuration.colorBlendAttachment.alphaDstBlend = coffee::BlendFactor::Zero;
-        configuration.colorBlendAttachment.alphaBlendOp = coffee::BlendOp::Add;
-        configuration.colorBlendAttachment.logicOpEnable = false;
-        configuration.colorBlendAttachment.logicOp = coffee::LogicOp::Copy;
+            return configuration;
+        }());
 
-        configuration.depthStencilInfo.depthTestEnable = true;
-        configuration.depthStencilInfo.depthWriteEnable = true;
-        configuration.depthStencilInfo.depthCompareOp = coffee::CompareOp::Less;
-        configuration.depthStencilInfo.stencilTestEnable = false;
-        configuration.depthStencilInfo.frontFace = {};
-        configuration.depthStencilInfo.backFace = {};
+        lightPointsPipeline = engine.createPipeline(renderPass, lightPointsConstants, { layout }, lightPointsProgram, {});
+    }
 
-        configuration.inputBindings.push_back(
-            { 0U, sizeof(coffee::Vertex), coffee::InputRate::PerVertex, coffee::Vertex::getElementDescriptions() });
+    void MainSystem::createImages() {
+        coffee::ImageConfiguration colorImageConfiguration {};
+        colorImageConfiguration.type = coffee::ImageType::TwoDimensional;
+        colorImageConfiguration.format = engine.getColorFormat();
+        colorImageConfiguration.width = engine.getFramebufferWidth();
+        colorImageConfiguration.height = engine.getFramebufferHeight();
+        colorImageConfiguration.usage = coffee::ImageUsage::ColorAttachment | coffee::ImageUsage::Sampled;
+        colorImageConfiguration.initialState = coffee::ResourceState::Undefined;
+        colorImageConfiguration.viewType = coffee::ImageViewType::TwoDimensional;
+        colorImageConfiguration.aspects = coffee::ImageAspect::Color;
+        colorImage = engine.createImage(colorImageConfiguration);
 
-        pipeline = engine.createPipeline(renderPass, pushConstants, { layout, sponzaModel->layout }, program, configuration);
+        coffee::ImageConfiguration depthImageConfiguration {};
+        depthImageConfiguration.type = coffee::ImageType::TwoDimensional;
+        depthImageConfiguration.format = engine.getDepthFormat();
+        depthImageConfiguration.width = engine.getFramebufferWidth();
+        depthImageConfiguration.height = engine.getFramebufferHeight();
+        depthImageConfiguration.usage = coffee::ImageUsage::DepthStencilAttachment;
+        depthImageConfiguration.initialState = coffee::ResourceState::Undefined;
+        depthImageConfiguration.viewType = coffee::ImageViewType::TwoDimensional;
+        depthImageConfiguration.aspects = coffee::ImageAspect::Depth;
+        depthImage = engine.createImage(depthImageConfiguration);
+    }
+
+    void MainSystem::createFramebuffer() {
+        coffee::FramebufferConfiguration framebufferConfiguration {};
+        framebufferConfiguration.width = engine.getFramebufferWidth();
+        framebufferConfiguration.height = engine.getFramebufferHeight();
+        framebufferConfiguration.colorViews.push_back(colorImage);
+        framebufferConfiguration.depthStencilView = depthImage;
+        framebuffer = engine.createFramebuffer(renderPass, framebufferConfiguration);
+    }
+
+    void MainSystem::updateDescriptors() {
+        outputSet->updateDescriptor(
+            coffee::DescriptorWriter(layout).addImage(0, coffee::ResourceState::ShaderResource, colorImage, textureSampler));
+    }
+
+    void MainSystem::createDescriptors() {
+        std::map<uint32_t, coffee::DescriptorBindingInfo> bindings {};
+
+        bindings[0] = { coffee::DescriptorType::UniformBuffer, coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment };
+        bindings[1] = { coffee::DescriptorType::UniformBuffer, coffee::ShaderStage::Fragment };
+
+        layout = engine.createDescriptorLayout(bindings);
+        descriptorSet = engine.createDescriptorSet(coffee::DescriptorWriter(layout).addBuffer(0, mvpBuffer).addBuffer(1, lightBuffer));
+
+        std::map<uint32_t, coffee::DescriptorBindingInfo> outputBindings {};
+
+        outputBindings[0] = { coffee::DescriptorType::ImageAndSampler, coffee::ShaderStage::Fragment };
+
+        outputLayout = engine.createDescriptorLayout(outputBindings);
+        outputSet = engine.createDescriptorSet(
+            coffee::DescriptorWriter(outputLayout).addImage(0, coffee::ResourceState::ShaderResource, colorImage, textureSampler));
     }
 
 }

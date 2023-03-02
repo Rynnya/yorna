@@ -7,26 +7,18 @@
 
 namespace game {
 
-    enum class TextureFlags : uint32_t {
-        Diffuse = 1 << 0,
-        Specular = 1 << 1,
-        Normals = 1 << 2
-    };
-
     // use glm::vec4 for automatic padding in c++ and vec3 in shader when you need exactly vec3
     // also put padding vector if you need to use basic types (like int or uint)
 
     class MeshInformation {
     public:
-        uint32_t textureFlags = 0U;
-        float shininess = 1.0f;
-        glm::vec2 _padding {};
         glm::vec4 diffuseColor {};
         glm::vec4 specularColor {};
         glm::vec4 ambientColor {};
-
-        void setTextureFlag(TextureFlags flag);
-        void resetTextureFlag(TextureFlags flag);
+        coffee::TextureType textureFlags = coffee::TextureType::None;
+        float shininessExponent = 1.0f;
+        float metallicFactor = 0.0f;
+        float roughnessFactor = 0.0f;
     };
 
     class Model {

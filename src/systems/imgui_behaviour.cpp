@@ -386,17 +386,24 @@ namespace game {
         }
     }
 
-    ImGuiSystem::ImGuiSystem(coffee::Engine& engine, const coffee::RenderPass& renderPass, coffee::DescriptorSet& image)
-        : engine { engine }
-        , image { image }
-    {
+    ImGuiSystem::ImGuiSystem(coffee::Engine& engine) : engine { engine } {
         ImGui::CreateContext();
         ImGui::StyleColorsDark();
 
         createFonts();
-        createDescriptorLayout();
-        createDescriptorSet();
-        createPipeline(renderPass);
+        createDescriptors();
+        createRenderPass();
+        createPipeline();
+
+        engine.addWindowResizeCallback("imgui_resize", [this](const coffee::ResizeEvent&) {
+            createFramebuffers();
+        });
+
+        engine.addPresentModeCallback("imgui_present_mode", [this](const coffee::PresentModeEvent&) {
+            createFramebuffers();
+        });
+
+        createFramebuffers();
 
         const size_t presentImagesSize = engine.getPresentImages().size();
         vertexBuffers.resize(presentImagesSize);
@@ -524,6 +531,9 @@ namespace game {
             return;
         }
 
+        commandBuffer->beginRenderPass(
+            renderPass, framebuffers[engine.getCurrentImageIndex()], { engine.getFramebufferWidth(), engine.getFramebufferHeight() });
+
         if (data->TotalVtxCount > 0) {
             size_t vertexSize = data->TotalVtxCount * sizeof(ImDrawVert);
             size_t indexSize = data->TotalIdxCount * sizeof(ImDrawIdx);
@@ -572,7 +582,7 @@ namespace game {
         commandBuffer->bindPipeline(pipeline);
         commandBuffer->bindDescriptorSet(descriptorSet);
 
-        commandBuffer->setViewport(framebufferWidth, framebufferHeight);
+        commandBuffer->setViewport({ static_cast<uint32_t>(framebufferWidth), static_cast<uint32_t>(framebufferHeight) });
 
         constants.scale.x = 2.0f / data->DisplaySize.x;
         constants.scale.y = 2.0f / data->DisplaySize.y;
@@ -614,7 +624,9 @@ namespace game {
                     commandBuffer->bindDescriptorSet(*reinterpret_cast<coffee::DescriptorSet*>(command.TextureId));
                 }
 
-                commandBuffer->setScissor(clipMax.x - clipMin.x, clipMax.y - clipMin.y, clipMin.x, clipMin.y);
+                commandBuffer->setScissor(
+                    { static_cast<uint32_t>(clipMax.x - clipMin.x), static_cast<uint32_t>(clipMax.y - clipMin.y) },
+                    { static_cast<int32_t>(clipMin.x), static_cast<int32_t>(clipMin.y) });
                 commandBuffer->drawIndexed(command.ElemCount, 1U, indexOffset + command.IdxOffset, vertexOffset + command.VtxOffset);
 
                 // We must restore default descriptor set
@@ -627,6 +639,7 @@ namespace game {
             indexOffset += list->IdxBuffer.Size;
         }
 
+        commandBuffer->endRenderPass();
     }
 
     void ImGuiSystem::createFonts() {
@@ -675,7 +688,7 @@ namespace game {
         engine.copyBufferToImage(fonts, staging);
     }
 
-    void ImGuiSystem::createDescriptorLayout() {
+    void ImGuiSystem::createDescriptors() {
         std::map<uint32_t, coffee::DescriptorBindingInfo> bindings {};
         coffee::DescriptorBindingInfo binding {};
 
@@ -683,68 +696,74 @@ namespace game {
         binding.stages = coffee::ShaderStage::Fragment;
         bindings[0] = binding;
 
-        layout = engine.createDescriptorLayout(bindings);
+        layout =
+            engine.createDescriptorLayout(bindings);
+        descriptorSet =
+            engine.createDescriptorSet(coffee::DescriptorWriter(layout).addImage(0, coffee::ResourceState::ShaderResource, fonts, fontsSampler));
     }
 
-    void ImGuiSystem::createDescriptorSet() {
-        descriptorSet = engine.createDescriptorSet(
-            coffee::DescriptorWriter(layout).addImage(0, coffee::ResourceState::ShaderResource, fonts, fontsSampler));
+    void ImGuiSystem::createRenderPass() {
+        coffee::RenderPassConfiguration renderPassConfiguration {};
+
+        auto& colorAttachment = renderPassConfiguration.colorAttachments.emplace_back();
+        colorAttachment.sampleCount = 1U;
+        colorAttachment.initialState = coffee::ResourceState::Undefined;
+        colorAttachment.finalState = coffee::ResourceState::Present;
+        colorAttachment.format = engine.getColorFormat();
+        colorAttachment.loadOp = coffee::AttachmentLoadOp::Clear;
+        colorAttachment.storeOp = coffee::AttachmentStoreOp::Store;
+        colorAttachment.stencilLoadOp = coffee::AttachmentLoadOp::DontCare;
+        colorAttachment.stencilStoreOp = coffee::AttachmentStoreOp::DontCare;
+        colorAttachment.clearValue = std::array<float, 4> { 0.01f, 0.01f, 0.01f, 1.0f };
+
+        // Interface will be used by ImGUI
+        renderPass = engine.createRenderPass(renderPassConfiguration);
     }
 
-    void ImGuiSystem::createPipeline(const coffee::RenderPass& renderPass) {
+    void ImGuiSystem::createPipeline() {
         coffee::PushConstants pushConstants {};
+        coffee::ShaderProgram program {};
 
         pushConstants
             .addRange(coffee::ShaderStage::Vertex)
             .addObject<ImGuiPushConstant>();
 
-        coffee::ShaderProgram program {};
-        program.addVertexShader(engine.createShader(imguiVertexShader, coffee::ShaderStage::Vertex));
-        program.addFragmentShader(engine.createShader(imguiFragmentShader, coffee::ShaderStage::Fragment));
+        program
+            .addVertexShader(engine.createShader(imguiVertexShader, coffee::ShaderStage::Vertex))
+            .addFragmentShader(engine.createShader(imguiFragmentShader, coffee::ShaderStage::Fragment));
 
         coffee::PipelineConfiguration configuration {};
 
-        configuration.inputAssembly.topology = coffee::Topology::Triangle;
-        configuration.inputAssembly.primitiveRestartEnable = false;
-
-        configuration.rasterizationInfo.fillMode = coffee::PolygonMode::Solid;
-        configuration.rasterizationInfo.cullMode = coffee::CullMode::None;
         configuration.rasterizationInfo.frontFace = coffee::FrontFace::CounterClockwise;
-        configuration.rasterizationInfo.depthBiasEnable = false;
-        configuration.rasterizationInfo.depthBiasConstantFactor = 0.0f;
-        configuration.rasterizationInfo.depthBiasClamp = 0.0f;
-        configuration.rasterizationInfo.depthBiasSlopeFactor = 0.0f;
-
-        configuration.multisampleInfo.sampleRateShading = false;
-        configuration.multisampleInfo.sampleCount = 1U;
-        configuration.multisampleInfo.minSampleShading = 1.0f;
-        configuration.multisampleInfo.alphaToCoverage = false;
 
         configuration.colorBlendAttachment.blendEnable = true;
-        configuration.colorBlendAttachment.colorWriteMask =
-            coffee::ColorComponent::Red   |
-            coffee::ColorComponent::Green |
-            coffee::ColorComponent::Blue  |
-            coffee::ColorComponent::Alpha ;
         configuration.colorBlendAttachment.srcBlend = coffee::BlendFactor::SrcAlpha;
         configuration.colorBlendAttachment.dstBlend = coffee::BlendFactor::OneMinusSrcAlpha;
         configuration.colorBlendAttachment.blendOp = coffee::BlendOp::Add;
         configuration.colorBlendAttachment.alphaSrcBlend = coffee::BlendFactor::One;
         configuration.colorBlendAttachment.alphaDstBlend = coffee::BlendFactor::OneMinusSrcAlpha;
         configuration.colorBlendAttachment.alphaBlendOp = coffee::BlendOp::Add;
-        configuration.colorBlendAttachment.logicOpEnable = false;
-        configuration.colorBlendAttachment.logicOp = coffee::LogicOp::Copy;
 
         configuration.depthStencilInfo.depthTestEnable = false;
         configuration.depthStencilInfo.depthWriteEnable = false;
         configuration.depthStencilInfo.depthCompareOp = coffee::CompareOp::Never;
-        configuration.depthStencilInfo.stencilTestEnable = false;
-        configuration.depthStencilInfo.frontFace = {};
-        configuration.depthStencilInfo.backFace = {};
 
         configuration.inputBindings.push_back({ 0U, sizeof(ImDrawVert), coffee::InputRate::PerVertex, getElementDescriptions() });
 
         pipeline = engine.createPipeline(renderPass, pushConstants, { layout }, program, configuration);
+    }
+
+    void ImGuiSystem::createFramebuffers() {
+        const auto& presentImages = engine.getPresentImages();
+        framebuffers.resize(presentImages.size());
+
+        for (size_t i = 0; i < presentImages.size(); i++) {
+            coffee::FramebufferConfiguration framebufferConfiguration {};
+            framebufferConfiguration.width = engine.getFramebufferWidth();
+            framebufferConfiguration.height = engine.getFramebufferHeight();
+            framebufferConfiguration.colorViews.push_back(presentImages[i]);
+            framebuffers[i] = engine.createFramebuffer(renderPass, framebufferConfiguration);
+        }
     }
 
     void ImGuiSystem::updateMouse() {
@@ -808,8 +827,10 @@ namespace game {
             ImGuiIO& io = ImGui::GetIO();
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
-            ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
-            ImGui::Image(reinterpret_cast<void*>(&image), viewportPanelSize);
+            if (framebufferImage != nullptr) {
+                ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
+                ImGui::Image(reinterpret_cast<void*>(&framebufferImage), viewportPanelSize);
+            }
 
             ImGui::End();
         }

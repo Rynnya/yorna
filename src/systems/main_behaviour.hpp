@@ -16,20 +16,40 @@ namespace game {
             glm::mat4 normal { 1.0f };
         };
 
-        MainSystem(
-            coffee::Engine& engine,
-            const coffee::RenderPass& renderPass);
+        struct LightPushConstants {
+            glm::vec4 position {};
+            glm::vec4 color {};
+            float radius {};
+        };
+
+        MainSystem(coffee::Engine& engine);
         ~MainSystem();
 
-        void update();
-        void render(const coffee::CommandBuffer& commandBuffer);
+        void performDepthPass();
+        void updateObjects();
+        void updateLightPoints();
+        void renderObjects(const coffee::CommandBuffer& commandBuffer);
+        void renderLightPoints(const coffee::CommandBuffer& commandBuffer);
+
+        void beginRenderPass(const coffee::CommandBuffer& commandBuffer);
+        void endRenderPass(const coffee::CommandBuffer& commandBuffer);
+
+        coffee::DescriptorLayout outputLayout;
+        coffee::DescriptorSet outputSet;
 
     private:
-        void loadModels();
-        void createDescriptors();
+        void createSamplers();
         void createBuffers();
-        void createTextureSampler();
-        void createPipeline(const coffee::RenderPass& renderPass);
+        void loadModels();
+        void createRenderPasses();
+        void createPipelines();
+
+        // Must be recreated when window resizes or when present mode changes
+        void createImages();
+        void createFramebuffer();
+        void updateDescriptors();
+
+        void createDescriptors();
 
         Camera camera {};
         GameObject viewerObject { GameObject::createGameObject() };
@@ -38,16 +58,23 @@ namespace game {
         const float moveSpeed = 10.0f;
         UModel sponzaModel, backpackModel;
 
-        MainPushConstants constants {};
+        MainPushConstants mainConstants {};
+        LightPushConstants lightPointsConstants {};
 
+        coffee::RenderPass renderPass;
+        coffee::Pipeline mainPipeline;
+        coffee::Pipeline lightPointsPipeline;
+
+        coffee::Image colorImage;
+        coffee::Image depthImage;
+        coffee::Framebuffer framebuffer;
         coffee::DescriptorLayout layout;
         coffee::DescriptorSet descriptorSet;
-        coffee::DescriptorSet nullTextureDescriptor;
-        coffee::Pipeline pipeline;
 
         coffee::Buffer mvpBuffer;
         coffee::Buffer lightBuffer;
         coffee::Sampler textureSampler;
+        coffee::Sampler outputSampler;
 
         coffee::Engine& engine;
     };

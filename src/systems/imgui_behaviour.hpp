@@ -19,17 +19,22 @@ namespace game {
             glm::vec2 translate;
         };
 
-        ImGuiSystem(coffee::Engine& engine, const coffee::RenderPass& renderPass, coffee::DescriptorSet& image);
+        ImGuiSystem(coffee::Engine& engine);
         ~ImGuiSystem();
 
         void update();
         void render(const coffee::CommandBuffer& commandBuffer);
 
+        coffee::DescriptorSet framebufferImage;
+
     private:
         void createFonts();
-        void createDescriptorLayout();
-        void createDescriptorSet();
-        void createPipeline(const coffee::RenderPass& renderPass);
+        void createDescriptors();
+        void createRenderPass();
+        void createPipeline();
+
+        // Must be recreated when window resizes or when present mode changes
+        void createFramebuffers();
 
         void updateMouse();
         void updateCursor();
@@ -41,7 +46,9 @@ namespace game {
 
         coffee::DescriptorLayout layout;
         coffee::DescriptorSet descriptorSet;
+        coffee::RenderPass renderPass;
         coffee::Pipeline pipeline;
+        std::vector<coffee::Framebuffer> framebuffers {};
 
         coffee::Image fonts;
         coffee::Sampler fontsSampler;
@@ -49,7 +56,6 @@ namespace game {
         std::vector<coffee::Buffer> indexBuffers;
 
         coffee::Engine& engine;
-        coffee::DescriptorSet& image;
     };
 
 }

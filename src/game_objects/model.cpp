@@ -4,14 +4,6 @@
 
 namespace game {
 
-    void MeshInformation::setTextureFlag(TextureFlags flag) {
-        textureFlags |= static_cast<uint32_t>(flag);
-    }
-
-    void MeshInformation::resetTextureFlag(TextureFlags flag) {
-        textureFlags &= ~static_cast<uint32_t>(flag);
-    }
-
     Model::Model(coffee::Engine& engine, const std::string& filename, TransformComponent transform, const coffee::Sampler& textureSampler)
         : transform { transform }
         , model { engine.importModel(filename) }
@@ -31,6 +23,8 @@ namespace game {
         bindings[1] = binding;
         bindings[2] = binding;
         bindings[3] = binding;
+        bindings[4] = binding;
+        bindings[5] = binding;
 
         layout = engine.createDescriptorLayout(bindings);
 
@@ -47,25 +41,11 @@ namespace game {
             const auto& meshMaterials = meshes[i]->materials;
             auto& currentMeshInfo = meshesInformation[i];
 
-            const auto& diffuse = meshMaterials.read(coffee::TextureType::Diffuse);
-            const auto& specular = meshMaterials.read(coffee::TextureType::Specular);
-            const auto& normals = meshMaterials.read(coffee::TextureType::Normals);
-
-            auto checkAndSet = [this, &meshMaterials, &currentMeshInfo](const coffee::Texture& texture, TextureFlags flag) {
-                if (texture != meshMaterials.defaultTexture) {
-                    currentMeshInfo.setTextureFlag(flag);
-                }
-            };
-
             auto copyVector = [](glm::vec4& dst, const coffee::Vec3& src) {
                 dst.r = src.r;
                 dst.g = src.g;
                 dst.b = src.b;
             };
-
-            checkAndSet(diffuse, TextureFlags::Diffuse);
-            checkAndSet(specular, TextureFlags::Specular);
-            checkAndSet(normals, TextureFlags::Normals);
 
             copyVector(currentMeshInfo.diffuseColor, meshMaterials.modifiers.diffuseColor);
             copyVector(currentMeshInfo.specularColor, meshMaterials.modifiers.specularColor);
@@ -75,10 +55,18 @@ namespace game {
             currentMeshInfo.ambientColor.b = meshMaterials.modifiers.ambientColor.b;
             currentMeshInfo.ambientColor.a = meshMaterials.modifiers.ambientColor.a;
 
+            currentMeshInfo.shininessExponent = meshMaterials.modifiers.shininessExponent;
+            currentMeshInfo.metallicFactor = meshMaterials.modifiers.metallicFactor;
+            currentMeshInfo.roughnessFactor = meshMaterials.modifiers.roughnessFactor;
+
+            currentMeshInfo.textureFlags = meshMaterials.getTextureFlags();
+
             writer.addBuffer(0, meshesInformationBuffers[i]);
-            writer.addTexture(1, coffee::ResourceState::ShaderResource, diffuse, textureSampler);
-            writer.addTexture(2, coffee::ResourceState::ShaderResource, specular, textureSampler);
-            writer.addTexture(3, coffee::ResourceState::ShaderResource, normals, textureSampler);
+            writer.addTexture(1, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Diffuse), textureSampler);
+            writer.addTexture(2, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Specular), textureSampler);
+            writer.addTexture(3, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Normals), textureSampler);
+            writer.addTexture(4, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Metallic), textureSampler);
+            writer.addTexture(5, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Roughness), textureSampler);
 
             descriptors.push_back(engine.createDescriptorSet(writer));
         }
