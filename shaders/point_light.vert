@@ -24,9 +24,8 @@ layout (set = 0, binding = 0) uniform MVPUBO {
 } mvpUbo;
 
 layout (push_constant) uniform Push {
-    vec4 position;
+    vec4 position; // w is radius
     vec4 color;
-    float radius;
 } push;
 
 void main() {
@@ -36,8 +35,8 @@ void main() {
     vec3 cameraUpWorld = { mvpUbo.view[0][1], mvpUbo.view[1][1], mvpUbo.view[2][1] };
 
     vec3 positionWorld = push.position.xyz
-        + push.radius * fragOffset.x * cameraRightWorld
-        + push.radius * fragOffset.y * cameraUpWorld;
+        + push.position.w * fragOffset.x * cameraRightWorld
+        + push.position.w * fragOffset.y * cameraUpWorld;
 
     gl_Position = mvpUbo.projection * mvpUbo.view * vec4(positionWorld, 1.0);
 }

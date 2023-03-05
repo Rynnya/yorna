@@ -9,6 +9,15 @@
 
 namespace game {
 
+    std::vector<glm::vec4> lightColors {
+        {1.0f, 0.1f, 0.1f, 1.0f},
+        {0.1f, 0.1f, 1.0f, 1.0f},
+        {0.1f, 1.0f, 0.1f, 1.0f},
+        {1.0f, 1.0f, 0.1f, 1.0f},
+        {0.1f, 1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f, 1.0f}
+    };
+
     MainSystem::MainSystem(coffee::Engine& engine) : engine { engine } {
         createSamplers();
         createBuffers();
@@ -29,9 +38,11 @@ namespace game {
         StaticObjects::mvpUniformBuffers.resize(presentImagesSize);
         StaticObjects::lightUniformBuffers.resize(presentImagesSize);
 
-        for (auto& currentLightBuffer : StaticObjects::lightUniformBuffers) {
-            currentLightBuffer.lightPoint.position = { -1.0f, 1.0f, -1.0f, 1.0f }; // w component is ignored
-            currentLightBuffer.lightPoint.color = { 1.0f, 1.0f, 1.0f, 4.0f }; // rgb and w component as intensity
+        for (size_t i = 0; i < lightColors.size(); i++) {
+            LightObject& object = lights.emplace_back(LightObject::createLightObject(lightColors[i].a));
+            object.color = lightColors[i];
+            auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, (i * glm::two_pi<float>()) / lightColors.size(), { 0.0f, -1.0f, 0.0f });
+            object.transform.translation = glm::vec3(rotateLight * glm::vec4 { -0.5f, 1.0f, -0.5f, 1.0f });
         }
 
         engine.addMouseClickCallback("main", [&](const coffee::MouseClickEvent& e) {
@@ -46,11 +57,10 @@ namespace game {
                 return;
             }
 
-            const float lookDistance = lookSpeed * engine.getDeltaTime();
             viewerObject.transform.rotation.x =
-                glm::clamp(viewerObject.transform.rotation.x + lookDistance * (e.getY() - engine.getMouseY()), -1.5f, 1.5f);
+                glm::clamp(viewerObject.transform.rotation.x + lookSpeed * (e.getY() - engine.getMouseY()), -1.5f, 1.5f);
             viewerObject.transform.rotation.y =
-                glm::mod(viewerObject.transform.rotation.y + lookDistance * (e.getX() - engine.getMouseX()), glm::two_pi<float>());
+                glm::mod(viewerObject.transform.rotation.y + lookSpeed * (e.getX() - engine.getMouseX()), glm::two_pi<float>());
         });
 
         engine.addKeyCallback("main", [&](const coffee::KeyEvent& e) {
@@ -84,8 +94,22 @@ namespace game {
         engine.removeMouseClickCallback("main");
     }
 
-    void MainSystem::performDepthPass() {
+    void MainSystem::performDepthPass(const coffee::CommandBuffer& commandBuffer) {
+        const coffee::Extent2D currentExtent = { engine.getFramebufferWidth(), engine.getFramebufferHeight() };
+        commandBuffer->beginRenderPass(earlyDepthPass, earlyDepthFramebuffer, currentExtent);
 
+        commandBuffer->setViewport(currentExtent);
+        commandBuffer->setScissor(currentExtent);
+        commandBuffer->bindPipeline(earlyDepthPipeline);
+        commandBuffer->bindDescriptorSet(descriptorSet);
+        commandBuffer->pushConstants(coffee::ShaderStage::Vertex, sponzaModel->transform.mat4());
+
+        const auto& meshes = sponzaModel->model->meshes;
+        for (size_t i = 0; i < meshes.size(); i++) {
+            meshes[i]->draw(commandBuffer);
+        }
+
+        commandBuffer->endRenderPass();
     }
 
     void MainSystem::updateObjects() {
@@ -122,31 +146,32 @@ namespace game {
         mvp.projection = camera.getProjection();
         mvp.view = camera.getView();
         mvp.inverseView = camera.getInverseView();
+
+        mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
+        mvpBuffer->flush();
     }
 
     void MainSystem::updateLightPoints() {
-        //auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, engine.getDeltaTime(), { 0.0f, -1.0f, 0.0f });
-        //LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
+        auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, engine.getDeltaTime(), { 0.0f, -1.0f, 0.0f });
+        LightUniformBuffer& currentLightBuffer = StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()];
 
-        //for (size_t i = 0; i < lights.size(); i++) {
-        //    lights[i].transform.translation = glm::vec3(rotateLight * glm::vec4 { lights[i].transform.translation, 1.0f });
+        for (size_t i = 0; i < lights.size(); i++) {
+            lights[i].transform.translation = glm::vec3(rotateLight * glm::vec4 { lights[i].transform.translation, 1.0f });
 
-        //    currentLightBuffer.lightPoints[i].position = glm::vec4(lights[i].transform.translation, 1.0f);
-        //    currentLightBuffer.lightPoints[i].color = glm::vec4(lights[i].color, lights[i].intensity);
-        //}
+            currentLightBuffer.lightPoints[i].position = glm::vec4(lights[i].transform.translation, lights[i].transform.scale.r);
+            currentLightBuffer.lightPoints[i].color = glm::vec4(lights[i].color, lights[i].intensity);
+        }
 
-        //currentLightBuffer.length = static_cast<uint32_t>(lights.size());
+        currentLightBuffer.size = static_cast<uint32_t>(lights.size());
+
+        lightBuffer->write(StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()]);
+        lightBuffer->flush();
     }
 
     void MainSystem::renderObjects(const coffee::CommandBuffer& commandBuffer) {
         commandBuffer->bindPipeline(mainPipeline);
         commandBuffer->setViewport({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
         commandBuffer->setScissor({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
-
-        mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
-        mvpBuffer->flush();
-        lightBuffer->write(StaticObjects::lightUniformBuffers[engine.getCurrentImageIndex()]);
-        lightBuffer->flush();
 
         mainConstants.transform = sponzaModel->transform.mat4();
         mainConstants.normal = sponzaModel->transform.normal();
@@ -167,15 +192,13 @@ namespace game {
         commandBuffer->setViewport({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
         commandBuffer->setScissor({ engine.getFramebufferWidth(), engine.getFramebufferHeight() });
 
-        mvpBuffer->write(StaticObjects::mvpUniformBuffers[engine.getCurrentImageIndex()]);
-        mvpBuffer->flush();
+        for (uint32_t i = 0; i < currentLightBuffer.size; i++) {
+            lightPointsConstants.position = currentLightBuffer.lightPoints[i].position;
+            lightPointsConstants.color = currentLightBuffer.lightPoints[i].color;
 
-        lightPointsConstants.position = currentLightBuffer.lightPoint.position;
-        lightPointsConstants.color = currentLightBuffer.lightPoint.color;
-        lightPointsConstants.radius = 0.2f;
-
-        commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, lightPointsConstants);
-        commandBuffer->draw(6);
+            commandBuffer->pushConstants(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment, lightPointsConstants);
+            commandBuffer->draw(6);
+        }
     }
 
     void MainSystem::beginRenderPass(const coffee::CommandBuffer& commandBuffer) {
@@ -211,7 +234,7 @@ namespace game {
     }
 
     void MainSystem::createBuffers() {
-        coffee::BufferConfiguration configuration{};
+        coffee::BufferConfiguration configuration {};
         configuration.usage = coffee::BufferUsage::Uniform;
         configuration.properties = coffee::MemoryProperty::HostVisible;
         configuration.instanceCount = 1U;
@@ -226,10 +249,24 @@ namespace game {
     void MainSystem::loadModels() {
         sponzaModel = std::make_unique<Model>(engine, "models/sponza_scene.glb", TransformComponent {}, textureSampler);
 
-        viewerObject.transform.translation.z = -2.5f;
+        viewerObject.transform.translation.z = -1.5f;
+        viewerObject.transform.translation.y = 1.0f;
     }
 
     void MainSystem::createRenderPasses() {
+        coffee::RenderPassConfiguration earlyPassConfiguration {};
+        coffee::AttachmentConfiguration earlyDepthConfiguration {};
+        earlyDepthConfiguration.initialState = coffee::ResourceState::Undefined;
+        earlyDepthConfiguration.finalState = coffee::ResourceState::DepthWrite;
+        earlyDepthConfiguration.format = engine.getDepthFormat();
+        earlyDepthConfiguration.loadOp = coffee::AttachmentLoadOp::Clear;
+        earlyDepthConfiguration.storeOp = coffee::AttachmentStoreOp::Store;
+        earlyDepthConfiguration.stencilLoadOp = coffee::AttachmentLoadOp::DontCare;
+        earlyDepthConfiguration.stencilStoreOp = coffee::AttachmentStoreOp::DontCare;
+        earlyDepthConfiguration.depthStencilClearValue = coffee::ClearDepthStencilValue { 1.0f, 0U };
+        earlyPassConfiguration.depthStencilAttachment = earlyDepthConfiguration;
+        earlyDepthPass = engine.createRenderPass(earlyPassConfiguration);
+
         coffee::RenderPassConfiguration renderPassConfiguration {};
         coffee::AttachmentConfiguration depthStencilAttachment {};
 
@@ -245,14 +282,13 @@ namespace game {
         colorAttachment.stencilStoreOp = coffee::AttachmentStoreOp::DontCare;
         colorAttachment.clearValue = std::array<float, 4> { 0.01f, 0.01f, 0.01f, 1.0f };
 
-        depthStencilAttachment.initialState = coffee::ResourceState::Undefined;
+        depthStencilAttachment.initialState = coffee::ResourceState::DepthWrite;
         depthStencilAttachment.finalState = coffee::ResourceState::DepthWrite;
         depthStencilAttachment.format = engine.getDepthFormat();
-        depthStencilAttachment.loadOp = coffee::AttachmentLoadOp::Clear;
-        depthStencilAttachment.storeOp = coffee::AttachmentStoreOp::DontCare;
+        depthStencilAttachment.loadOp = coffee::AttachmentLoadOp::Load;
+        depthStencilAttachment.storeOp = coffee::AttachmentStoreOp::Store;
         depthStencilAttachment.stencilLoadOp = coffee::AttachmentLoadOp::DontCare;
         depthStencilAttachment.stencilStoreOp = coffee::AttachmentStoreOp::DontCare;
-        depthStencilAttachment.depthStencilClearValue = coffee::ClearDepthStencilValue { 1.0f, 0U };
 
         renderPassConfiguration.depthStencilAttachment = depthStencilAttachment;
 
@@ -260,10 +296,16 @@ namespace game {
     }
 
     void MainSystem::createPipelines() {
+        coffee::PushConstants earlyDepthConstants {};
+        coffee::ShaderProgram earlyDepthProgram {};
         coffee::PushConstants mainPushConstants {};
         coffee::ShaderProgram mainProgram {};
         coffee::PushConstants lightPointsConstants {};
         coffee::ShaderProgram lightPointsProgram {};
+        
+        earlyDepthConstants
+            .addRange(coffee::ShaderStage::Vertex)
+            .addObject<glm::mat4>();
 
         mainPushConstants
             .addRange(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment)
@@ -273,6 +315,9 @@ namespace game {
             .addRange(coffee::ShaderStage::Vertex | coffee::ShaderStage::Fragment)
             .addObject<LightPushConstants>();
 
+        earlyDepthProgram
+            .addVertexShader(engine.createShader("shaders/early_depth.vert.spv", coffee::ShaderStage::Vertex));
+
         mainProgram
             .addVertexShader(engine.createShader("shaders/base.vert.spv", coffee::ShaderStage::Vertex))
             .addFragmentShader(engine.createShader("shaders/base.frag.spv", coffee::ShaderStage::Fragment));
@@ -280,6 +325,15 @@ namespace game {
         lightPointsProgram
             .addVertexShader(engine.createShader("shaders/point_light.vert.spv", coffee::ShaderStage::Vertex))
             .addFragmentShader(engine.createShader("shaders/point_light.frag.spv", coffee::ShaderStage::Fragment));
+
+        earlyDepthPipeline = engine.createPipeline(earlyDepthPass, earlyDepthConstants, { layout }, earlyDepthProgram, []() {
+            coffee::PipelineConfiguration configuration {};
+
+            configuration.inputBindings.push_back(
+                { 0U, sizeof(coffee::Vertex), coffee::InputRate::PerVertex, coffee::Vertex::getElementDescriptions() });
+
+            return configuration;
+        }());
 
         mainPipeline = engine.createPipeline(renderPass, mainPushConstants, { layout, sponzaModel->layout }, mainProgram, []() {
             coffee::PipelineConfiguration configuration {};
@@ -321,14 +375,16 @@ namespace game {
         coffee::FramebufferConfiguration framebufferConfiguration {};
         framebufferConfiguration.width = engine.getFramebufferWidth();
         framebufferConfiguration.height = engine.getFramebufferHeight();
-        framebufferConfiguration.colorViews.push_back(colorImage);
         framebufferConfiguration.depthStencilView = depthImage;
+        earlyDepthFramebuffer = engine.createFramebuffer(earlyDepthPass, framebufferConfiguration);
+
+        framebufferConfiguration.colorViews.push_back(colorImage);
         framebuffer = engine.createFramebuffer(renderPass, framebufferConfiguration);
     }
 
     void MainSystem::updateDescriptors() {
         outputSet->updateDescriptor(
-            coffee::DescriptorWriter(layout).addImage(0, coffee::ResourceState::ShaderResource, colorImage, textureSampler));
+            coffee::DescriptorWriter(outputLayout).addImage(0, coffee::ResourceState::ShaderResource, colorImage, textureSampler));
     }
 
     void MainSystem::createDescriptors() {

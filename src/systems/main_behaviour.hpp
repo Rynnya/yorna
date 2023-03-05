@@ -5,6 +5,7 @@
 
 #include "../game_objects/camera.hpp"
 #include "../game_objects/game_object.hpp"
+#include "../game_objects/light_object.hpp"
 #include "../game_objects/model.hpp"
 
 namespace game {
@@ -19,13 +20,12 @@ namespace game {
         struct LightPushConstants {
             glm::vec4 position {};
             glm::vec4 color {};
-            float radius {};
         };
 
         MainSystem(coffee::Engine& engine);
         ~MainSystem();
 
-        void performDepthPass();
+        void performDepthPass(const coffee::CommandBuffer& commandBuffer);
         void updateObjects();
         void updateLightPoints();
         void renderObjects(const coffee::CommandBuffer& commandBuffer);
@@ -54,19 +54,24 @@ namespace game {
         Camera camera {};
         GameObject viewerObject { GameObject::createGameObject() };
 
-        const float lookSpeed = 0.13f;
+        const float lookSpeed = 0.003f;
         const float moveSpeed = 10.0f;
         UModel sponzaModel, backpackModel;
+
+        std::vector<LightObject> lights {};
 
         MainPushConstants mainConstants {};
         LightPushConstants lightPointsConstants {};
 
+        coffee::RenderPass earlyDepthPass;
         coffee::RenderPass renderPass;
+        coffee::Pipeline earlyDepthPipeline;
         coffee::Pipeline mainPipeline;
         coffee::Pipeline lightPointsPipeline;
 
         coffee::Image colorImage;
         coffee::Image depthImage;
+        coffee::Framebuffer earlyDepthFramebuffer;
         coffee::Framebuffer framebuffer;
         coffee::DescriptorLayout layout;
         coffee::DescriptorSet descriptorSet;

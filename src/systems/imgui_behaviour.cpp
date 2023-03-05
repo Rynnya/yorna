@@ -807,7 +807,7 @@ namespace game {
 
             ImGui::Text("Hello world!");
 
-            ImGui::SliderFloat("Framerate Limiter", &slider, 60.0f, 240.0f);
+            ImGui::SliderFloat("Framerate Limiter", &slider, 60.0f, 1440.0f);
             ImGui::ColorEdit3("Clear Color", reinterpret_cast<float*>(&clearColor));
 
             if (ImGui::Button("Apply new frame rate limit")) {

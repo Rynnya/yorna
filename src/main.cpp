@@ -29,11 +29,12 @@ int main() {
             imguiSystem.update();
             imguiSystem.render(interfaceCommandBuffer);
 
+            mainSystem.updateObjects();
+            mainSystem.updateLightPoints();
+
+            mainSystem.performDepthPass(gameCommandBuffer);
             mainSystem.beginRenderPass(gameCommandBuffer);
             {
-                mainSystem.updateObjects();
-                mainSystem.updateLightPoints();
-
                 mainSystem.renderObjects(gameCommandBuffer);
                 mainSystem.renderLightPoints(gameCommandBuffer);
             }
