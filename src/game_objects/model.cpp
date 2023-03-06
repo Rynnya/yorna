@@ -1,6 +1,6 @@
 #include "model.hpp"
 
-#include <coffee/utils/math.hpp>
+#include <glm/glm.hpp>
 
 namespace game {
 
@@ -41,19 +41,9 @@ namespace game {
             const auto& meshMaterials = meshes[i]->materials;
             auto& currentMeshInfo = meshesInformation[i];
 
-            auto copyVector = [](glm::vec4& dst, const coffee::Vec3& src) {
-                dst.r = src.r;
-                dst.g = src.g;
-                dst.b = src.b;
-            };
-
-            copyVector(currentMeshInfo.diffuseColor, meshMaterials.modifiers.diffuseColor);
-            copyVector(currentMeshInfo.specularColor, meshMaterials.modifiers.specularColor);
-
-            currentMeshInfo.ambientColor.r = meshMaterials.modifiers.ambientColor.r;
-            currentMeshInfo.ambientColor.g = meshMaterials.modifiers.ambientColor.g;
-            currentMeshInfo.ambientColor.b = meshMaterials.modifiers.ambientColor.b;
-            currentMeshInfo.ambientColor.a = meshMaterials.modifiers.ambientColor.a;
+            currentMeshInfo.diffuseColor = glm::vec4(meshMaterials.modifiers.diffuseColor, 1.0f);
+            currentMeshInfo.specularColor = glm::vec4(meshMaterials.modifiers.specularColor, 1.0f);
+            currentMeshInfo.ambientColor = meshMaterials.modifiers.ambientColor;
 
             currentMeshInfo.shininessExponent = meshMaterials.modifiers.shininessExponent;
             currentMeshInfo.metallicFactor = meshMaterials.modifiers.metallicFactor;

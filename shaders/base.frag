@@ -51,11 +51,10 @@ const uint DIFFUSE_TEXTURE_BIT = 0x1;
 const uint SPECULAR_TEXTURE_BIT = 0x2;
 const uint AMBIENT_TEXTURE_BIT = 0x4;
 const uint EMISSIVE_TEXTURE_BIT = 0x8;
-const uint HEIGHT_TEXTURE_BIT = 0x10;
-const uint NORMAL_TEXTURE_BIT = 0x20;
-const uint ROUGHNESS_TEXTURE_BIT = 0x40;
-const uint METALLIC_TEXTURE_BIT = 0x80;
-const uint AMBIENT_OCCLUSION_TEXTURE_BIT = 0x100;
+const uint NORMAL_TEXTURE_BIT = 0x10;
+const uint ROUGHNESS_TEXTURE_BIT = 0x20;
+const uint METALLIC_TEXTURE_BIT = 0x40;
+const uint AMBIENT_OCCLUSION_TEXTURE_BIT = 0x80;
 
 layout (set = 1, binding = 0) uniform MaterialsInfo {
     vec3 diffuseColor;
