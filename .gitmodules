@@ -4,4 +4,5 @@
 [submodule "libs/imgui"]
 	path = libs/imgui
 	url = https://github.com/ocornut/imgui
+    branch = docking
 	ignore = dirty

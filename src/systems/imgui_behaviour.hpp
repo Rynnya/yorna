@@ -19,43 +19,68 @@ namespace game {
             glm::vec2 translate;
         };
 
-        ImGuiSystem(coffee::Engine& engine);
+        struct BackendPlatformData {
+            const coffee::AbstractWindow* windowPtr = nullptr;
+            const coffee::AbstractWindow* keyOwnerWindows[static_cast<uint32_t>(coffee::Keys::Last)] {};
+            ImVec2 lastMousePos {};
+            bool wantUpdateMonitors = false;
+        };
+
+        struct BackendRendererData {
+            coffee::DescriptorLayout layout = nullptr;
+            coffee::DescriptorSet descriptorSet = nullptr;
+            coffee::RenderPass renderPass = nullptr;
+            coffee::Pipeline pipeline = nullptr;
+            coffee::Image fonts = nullptr;
+            coffee::Sampler fontsSampler = nullptr;
+        };
+
+        struct ViewportData {
+            coffee::AbstractWindow* windowHandle;
+            int32_t ignoreWindowPositionFrameCount = 0;
+            int32_t ignoreWindowSizeFrameCount = 0;
+        };
+
+        struct RendererData {
+            std::vector<coffee::Framebuffer> framebuffers {};
+            std::vector<coffee::Buffer> vertexBuffers {};
+            std::vector<coffee::Buffer> indexBuffers {};
+        };
+
+        ImGuiSystem(coffee::Window& window);
         ~ImGuiSystem();
 
         void update();
-        void render(const coffee::CommandBuffer& commandBuffer);
+        void render();
 
         coffee::DescriptorSet framebufferImage;
 
     private:
+        static void render(ImGuiViewport* viewport, const coffee::CommandBuffer& commandBuffer);
+
+        void initializeImGui();
+        void initializeBackend();
+
         void createFonts();
         void createDescriptors();
         void createRenderPass();
         void createPipeline();
 
-        // Must be recreated when window resizes or when present mode changes
-        void createFramebuffers();
+        static void focusCallback(const coffee::AbstractWindow* const window, const coffee::WindowFocusEvent& e);
+        static void enterCallback(const coffee::AbstractWindow* const window, const coffee::WindowEnterEvent& e);
+        static void mouseClickCallback(const coffee::AbstractWindow* const window, const coffee::MouseClickEvent& e);
+        static void mousePositionCallback(const coffee::AbstractWindow* const window, const coffee::MouseMoveEvent& e);
+        static void mouseWheelCallback(const coffee::AbstractWindow* const window, const coffee::MouseWheelEvent& e);
+        static void keyCallback(const coffee::AbstractWindow* const window, const coffee::KeyEvent& e);
+        static void charCallback(const coffee::AbstractWindow* const window, char32_t ch);
+        static void updateMonitors();
 
-        void updateMouse();
-        void updateCursor();
+        void updateMouse(const coffee::Window& window);
+        void updateCursor(const coffee::Window& window);
 
-        void prepareImGui();
+        void prepareImGui(const coffee::Window& window);
 
-        ImVec2 lastMousePos {};
-        ImGuiPushConstant constants {};
-
-        coffee::DescriptorLayout layout;
-        coffee::DescriptorSet descriptorSet;
-        coffee::RenderPass renderPass;
-        coffee::Pipeline pipeline;
-        std::vector<coffee::Framebuffer> framebuffers {};
-
-        coffee::Image fonts;
-        coffee::Sampler fontsSampler;
-        std::vector<coffee::Buffer> vertexBuffers;
-        std::vector<coffee::Buffer> indexBuffers;
-
-        coffee::Engine& engine;
+        coffee::Window& mainWindow;
     };
 
 }

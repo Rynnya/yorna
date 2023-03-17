@@ -22,7 +22,24 @@ namespace game {
             glm::vec4 color {};
         };
 
-        MainSystem(coffee::Engine& engine);
+        struct MVPUniformBuffer {
+            glm::mat4 projection {};
+            glm::mat4 view {};
+            glm::mat4 inverseView {};
+            glm::vec4 ambientLightColor { 1.0f, 1.0f, 1.0f, 0.1f };
+        };
+
+        struct LightPoint {
+            glm::vec4 position {};
+            glm::vec4 color {};
+        };
+
+        struct LightUniformBuffer {
+            LightPoint lightPoints[10] {};
+            uint32_t size {};
+        };
+
+        MainSystem(coffee::Window& window);
         ~MainSystem();
 
         void performDepthPass(const coffee::CommandBuffer& commandBuffer);
@@ -54,8 +71,8 @@ namespace game {
         Camera camera {};
         GameObject viewerObject { GameObject::createGameObject() };
 
-        const float lookSpeed = 0.003f;
-        const float moveSpeed = 10.0f;
+        float lookSpeed = 0.003f;
+        float moveSpeed = 10.0f;
         UModel sponzaModel, backpackModel;
 
         std::vector<LightObject> lights {};
@@ -74,14 +91,21 @@ namespace game {
         coffee::Framebuffer earlyDepthFramebuffer;
         coffee::Framebuffer framebuffer;
         coffee::DescriptorLayout layout;
-        coffee::DescriptorSet descriptorSet;
 
-        coffee::Buffer mvpBuffer;
-        coffee::Buffer lightBuffer;
         coffee::Sampler textureSampler;
         coffee::Sampler outputSampler;
 
-        coffee::Engine& engine;
+        struct FrameInfo {
+            MVPUniformBuffer mvpUbo {};
+            LightUniformBuffer lightUbo {};
+
+            coffee::DescriptorSet descriptorSet;
+            coffee::Buffer mvpBuffer;
+            coffee::Buffer lightBuffer;
+        };
+
+        std::vector<FrameInfo> frameInfos {};
+        coffee::Window& window;
     };
 
 }

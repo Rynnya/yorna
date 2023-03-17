@@ -1,53 +1,61 @@
 #include <coffee/engine.hpp>
 
+#include <coffee/interfaces/thread_pool.hpp>
+
 #include "systems/imgui_behaviour.hpp"
 #include "systems/main_behaviour.hpp"
+#include "systems/structs.hpp"
 
 int main() {
+    coffee::Engine::initialize(coffee::BackendAPI::Vulkan);
+
+    coffee::ThreadPool threadPool { 2U };
+
     // Initialize window with 1280x720 resolution
     coffee::WindowSettings windowSettings {};
-    windowSettings.width = 1280U;
-    windowSettings.height = 720U;
+    windowSettings.extent.width = 1280U;
+    windowSettings.extent.height = 720U;
 
-    // Initialize engine which will create a Vulkan backend and window through GLFW
-    coffee::Engine engine { coffee::BackendSelect::Vulkan, windowSettings };
+    {
+        coffee::Window window = coffee::Factory::createWindow(windowSettings);
 
-    game::MainSystem mainSystem { engine };
-    game::ImGuiSystem imguiSystem { engine };
-    imguiSystem.framebufferImage = mainSystem.outputSet;
+        game::ImGuiSystem imguiSystem { window };
+        //game::MainSystem mainSystem { window };
+        //imguiSystem.framebufferImage = mainSystem.outputSet;
 
-    engine.setFrameLimit(60.0f);
-    engine.showWindow();
+        //auto gameThread = [&factory, &mainSystem]() {
+        //    coffee::CommandBuffer commandBuffer = factory.createCommandBuffer();
 
-    while (!engine.shouldExit()) {
-        engine.pollEvents();
+        //    mainSystem.updateObjects();
+        //    mainSystem.updateLightPoints();
 
-        if (engine.acquireFrame()) {
-            coffee::CommandBuffer interfaceCommandBuffer = engine.createCommandBuffer();
-            coffee::CommandBuffer gameCommandBuffer = engine.createCommandBuffer();
+        //    mainSystem.performDepthPass(commandBuffer);
+        //    mainSystem.beginRenderPass(commandBuffer);
+        //    {
+        //        mainSystem.renderObjects(commandBuffer);
+        //        mainSystem.renderLightPoints(commandBuffer);
+        //    }
+        //    mainSystem.endRenderPass(commandBuffer);
+
+        //    factory.sendCommandBuffer(std::move(commandBuffer));
+        //};
+
+        coffee::Engine::setFramerateLimit(60.0f);
+        window->showWindow();
+
+        std::vector<coffee::CommandBuffer> commandBuffers {};
+
+        while (!window->shouldClose()) {
+            coffee::Engine::pollEvents();
 
             imguiSystem.update();
-            imguiSystem.render(interfaceCommandBuffer);
+            imguiSystem.render();
 
-            mainSystem.updateObjects();
-            mainSystem.updateLightPoints();
-
-            mainSystem.performDepthPass(gameCommandBuffer);
-            mainSystem.beginRenderPass(gameCommandBuffer);
-            {
-                mainSystem.renderObjects(gameCommandBuffer);
-                mainSystem.renderLightPoints(gameCommandBuffer);
-            }
-            mainSystem.endRenderPass(gameCommandBuffer);
-
-            engine.sendCommandBuffer(std::move(gameCommandBuffer));
-            engine.sendCommandBuffer(std::move(interfaceCommandBuffer));
-
-            engine.endFrame();
+            coffee::Engine::wait();
         }
-
-        engine.wait();
     }
+
+    coffee::Engine::destroy();
 
     return 0;
 }

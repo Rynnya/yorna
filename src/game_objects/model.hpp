@@ -12,18 +12,24 @@ namespace game {
 
     class MeshInformation {
     public:
-        glm::vec4 diffuseColor {};
-        glm::vec4 specularColor {};
-        glm::vec4 ambientColor {};
-        coffee::TextureType textureFlags = coffee::TextureType::None;
-        float shininessExponent = 1.0f;
+        glm::vec3 diffuseColor {};
         float metallicFactor = 0.0f;
+        glm::vec3 specularColor {};
         float roughnessFactor = 0.0f;
+        coffee::TextureType textureFlags = coffee::TextureType::None;
     };
 
     class Model {
     public:
-        Model(coffee::Engine& engine, const std::string& filename, TransformComponent transform, const coffee::Sampler& textureSampler);
+        Model(
+            const std::string& filename,
+            TransformComponent transform,
+            const coffee::Sampler& textureSampler);
+        Model(
+            const std::string& modelFile,
+            const std::string& materialsFile,
+            TransformComponent transform,
+            const coffee::Sampler& textureSampler);
 
         void updateMeshesInformation();
 
@@ -33,6 +39,9 @@ namespace game {
         coffee::DescriptorLayout layout = nullptr;
         std::vector<coffee::Buffer> meshesInformationBuffers {};
         std::vector<coffee::DescriptorSet> descriptors {};
+
+    private:
+        void initialize(const coffee::Sampler& textureSampler);
     };
 
     using UModel = std::unique_ptr<Model>;

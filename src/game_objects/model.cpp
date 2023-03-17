@@ -4,15 +4,42 @@
 
 namespace game {
 
-    Model::Model(coffee::Engine& engine, const std::string& filename, TransformComponent transform, const coffee::Sampler& textureSampler)
+    Model::Model(
+        const std::string& filename,
+        TransformComponent transform,
+        const coffee::Sampler& textureSampler
+    )
         : transform { transform }
-        , model { engine.importModel(filename) }
+        , model { coffee::Engine::importModel(filename) }
     {
+        initialize(textureSampler);
+    }
+
+    Model::Model(
+        const std::string& modelFile,
+        const std::string& materialsFile,
+        TransformComponent transform,
+        const coffee::Sampler& textureSampler
+    )
+        : transform { transform }
+        , model { coffee::Engine::importModel(modelFile, { materialsFile }) }
+    {
+        initialize(textureSampler);
+    }
+
+    void Model::updateMeshesInformation() {
+        for (size_t i = 0; i < meshesInformationBuffers.size(); i++) {
+            const auto& buffer = meshesInformationBuffers[i];
+            buffer->write(meshesInformation[i]);
+        }
+    }
+
+    void Model::initialize(const coffee::Sampler& textureSampler) {
         const auto& meshes = model->meshes;
         meshesInformation.resize(meshes.size());
 
         std::map<uint32_t, coffee::DescriptorBindingInfo> bindings {};
-        coffee::DescriptorBindingInfo binding {};
+        coffee::DescriptorBindingInfo binding{};
 
         binding.type = coffee::DescriptorType::UniformBuffer;
         binding.stages = coffee::ShaderStage::Fragment;
@@ -26,26 +53,23 @@ namespace game {
         bindings[4] = binding;
         bindings[5] = binding;
 
-        layout = engine.createDescriptorLayout(bindings);
+        layout = coffee::Factory::createDescriptorLayout(bindings);
 
-        coffee::DescriptorWriter writer = coffee::DescriptorWriter { layout };
+        coffee::DescriptorWriter writer = coffee::DescriptorWriter{ layout };
 
         for (size_t i = 0; i < meshes.size(); i++) {
-            coffee::BufferConfiguration bufferConfiguration {};
+            coffee::BufferConfiguration bufferConfiguration{};
             bufferConfiguration.usage = coffee::BufferUsage::Uniform;
             bufferConfiguration.properties = coffee::MemoryProperty::HostVisible;
             bufferConfiguration.instanceCount = 1U;
             bufferConfiguration.instanceSize = static_cast<uint32_t>(sizeof(MeshInformation));
-            meshesInformationBuffers.push_back(engine.createBuffer(bufferConfiguration));
+            meshesInformationBuffers.push_back(coffee::Factory::createBuffer(bufferConfiguration));
 
             const auto& meshMaterials = meshes[i]->materials;
             auto& currentMeshInfo = meshesInformation[i];
 
-            currentMeshInfo.diffuseColor = glm::vec4(meshMaterials.modifiers.diffuseColor, 1.0f);
-            currentMeshInfo.specularColor = glm::vec4(meshMaterials.modifiers.specularColor, 1.0f);
-            currentMeshInfo.ambientColor = meshMaterials.modifiers.ambientColor;
-
-            currentMeshInfo.shininessExponent = meshMaterials.modifiers.shininessExponent;
+            currentMeshInfo.diffuseColor = meshMaterials.modifiers.diffuseColor;
+            currentMeshInfo.specularColor = meshMaterials.modifiers.specularColor;
             currentMeshInfo.metallicFactor = meshMaterials.modifiers.metallicFactor;
             currentMeshInfo.roughnessFactor = meshMaterials.modifiers.roughnessFactor;
 
@@ -58,17 +82,10 @@ namespace game {
             writer.addTexture(4, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Metallic), textureSampler);
             writer.addTexture(5, coffee::ResourceState::ShaderResource, meshMaterials.read(coffee::TextureType::Roughness), textureSampler);
 
-            descriptors.push_back(engine.createDescriptorSet(writer));
+            descriptors.push_back(coffee::Factory::createDescriptorSet(writer));
         }
 
         updateMeshesInformation();
-    }
-
-    void Model::updateMeshesInformation() {
-        for (size_t i = 0; i < meshesInformationBuffers.size(); i++) {
-            const auto& buffer = meshesInformationBuffers[i];
-            buffer->write(meshesInformation[i]);
-        }
     }
 
 }
