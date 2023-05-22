@@ -11,3 +11,26 @@ index 876cf32f..318c51b5 100644
  
  //---- Override ImDrawCallback signature (will need to modify renderer backends accordingly)
  //struct ImDrawList;
+diff --git a/imgui.cpp b/imgui.cpp
+index 4f0744a1..b86103a3 100644
+--- a/imgui.cpp
++++ b/imgui.cpp
+@@ -6759,7 +6759,9 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
+ 
+         // Late create viewport if we don't fit within our current host viewport.
+         if (window->ViewportAllowPlatformMonitorExtend >= 0 && !window->ViewportOwned && !(window->Viewport->Flags & ImGuiViewportFlags_Minimized))
+-            if (!window->Viewport->GetMainRect().Contains(window->Rect()))
++        {
++            ImRect mainRect = window->Viewport->GetMainRect();
++            if (!mainRect.Contains(window->Rect()) && !mainRect.Contains(g.MouseLastValidPos))
+             {
+                 // This is based on the assumption that the DPI will be known ahead (same as the DPI of the selection done in UpdateSelectWindowViewport)
+                 //ImGuiViewport* old_viewport = window->Viewport;
+@@ -6771,6 +6773,7 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
+                 window->FontDpiScale = (g.IO.ConfigFlags & ImGuiConfigFlags_DpiEnableScaleFonts) ? window->Viewport->DpiScale : 1.0f;
+                 SetCurrentWindow(window);
+             }
++        }
+ 
+         if (window->ViewportOwned)
+             WindowSyncOwnedViewport(window, parent_window_in_stack);
