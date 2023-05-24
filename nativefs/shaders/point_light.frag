@@ -27,5 +27,5 @@ void main() {
         discard;
     }
 
-    outColor = vec4(pow(push.color.xyz, vec3(1.0 / 2.0)), 1.0);
+    outColor = vec4(pow(push.color.xyz, vec3(1.0 / 2.2)), 1.0);
 }

@@ -4,7 +4,6 @@
 #include <coffee/graphics/descriptors.hpp>
 #include <coffee/graphics/window.hpp>
 #include <coffee/interfaces/loop_handler.hpp>
-#include <coffee/interfaces/thread_pool.hpp>
 
 #include <systems/imgui/viewports.hpp>
 
@@ -65,10 +64,9 @@ namespace editor {
         const coffee::GPUDevicePtr& device;
         coffee::LoopHandler& loopHandler;
 
-        coffee::WindowPtr applicationWindow;
         bool acquired = false;
+        coffee::WindowPtr applicationWindow;
         coffee::DescriptorSetPtr framebufferImage;
-        coffee::ThreadPool gameThreadPool;
 
         VkQueryPool timestampQueryPool = VK_NULL_HANDLE;
 

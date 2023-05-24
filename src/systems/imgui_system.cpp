@@ -10,6 +10,7 @@
 #include <systems/imgui/shaders.hpp>
 #include <systems/imgui/structures.hpp>
 
+#include <oneapi/tbb/task_group.h>
 #include <json.hpp>
 
 namespace editor {
@@ -241,7 +242,6 @@ namespace editor {
     ImGuiSystem::ImGuiSystem(const coffee::GPUDevicePtr& device, coffee::LoopHandler& loopHandler)
         : device { device }
         , loopHandler { loopHandler }
-        , gameThreadPool { 2U }
     {
         applicationWindow = coffee::Window::create(device, {
             .extent = { 1280U, 720U },
@@ -292,6 +292,8 @@ namespace editor {
             device->sendCommandBuffer(std::move(commandBuffer));
         };
 
+        tbb::task_group gameLoopTask {};
+
         applicationWindow->showWindow();
         std::chrono::system_clock::time_point loopBeginTime {};
 
@@ -306,11 +308,11 @@ namespace editor {
 
             this->update(loopHandler.deltaTime());
 
-            gameThreadPool.push(gameThreadWork);
+            gameLoopTask.run(gameThreadWork);
             this->prepareImGui();
             this->render();
 
-            gameThreadPool.waitForTasks();
+            gameLoopTask.wait();
             device->submitPendingWork();
 
             sceneViewport.averageCPUTime[sceneViewport.statisticIndex] =
