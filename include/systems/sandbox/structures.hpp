@@ -3,11 +3,12 @@
 
 #include <coffee/graphics/descriptors.hpp>
 
-#include <entities/point_light.hpp>
+#include <entities/light_objects.hpp>
 
 namespace editor {
 
-    constexpr size_t maxAmountOfPointLights = 10;
+    constexpr size_t maxAmountOfPointLights = 64;
+    constexpr size_t maxAmountOfSpotLights = 32;
 
     struct MainPushConstants {
         glm::mat4 transform { 1.0f };
@@ -26,23 +27,41 @@ namespace editor {
         glm::vec4 ambientLightColor { 1.0f, 1.0f, 1.0f, 0.07f };
     };
 
-    struct LightPoint {
+    struct PointLightUBO {
         glm::vec4 position {};
         glm::vec4 color {};
     };
 
-    struct LightUniformBuffer {
-        LightPoint lightPoints[maxAmountOfPointLights] {};
-        uint32_t size {};
+    struct SpotLightUBO {
+        glm::vec4 position {};
+        glm::vec4 color {};
+        glm::vec4 coneDirection {}; // w is coneAngle
     };
+
+    struct DirectionalLightUBO {
+        glm::vec4 direction {};
+        glm::vec4 color {};
+    };
+
+    struct LightUniformBuffer {
+        glm::mat4 sunlightSpaceMatrix { 1.0f };
+        glm::vec4 sunlightDirection { 1.0f };
+        glm::vec4 sunlightColor { 1.0f };
+        uint32_t amountOfPointLights {};
+        uint32_t amountOfSpotLights {};
+        alignas(16) PointLightUBO pointLights[maxAmountOfPointLights] {};
+        SpotLightUBO spotLights[maxAmountOfSpotLights] {};
+    };
+
+    static_assert(offsetof(LightUniformBuffer, pointLights) == sizeof(glm::mat4) + 3 * sizeof(glm::vec4), "Invalid alignment");
 
     struct FrameInfo {
         MVPUniformBuffer mvpUbo {};
         LightUniformBuffer lightUbo {};
 
-        coffee::DescriptorSetPtr descriptorSet;
-        coffee::BufferPtr mvpBuffer;
-        coffee::BufferPtr lightBuffer;
+        coffee::graphics::DescriptorSetPtr descriptorSet;
+        coffee::graphics::BufferPtr mvpBuffer;
+        coffee::graphics::BufferPtr lightBuffer;
     };
 
 }

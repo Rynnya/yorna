@@ -20,20 +20,21 @@ namespace editor {
 
     class Model {
     public:
-        Model(const coffee::GPUDevicePtr& device, const coffee::ModelPtr& model, const coffee::SamplerPtr& textureSampler);
+        Model(const coffee::graphics::DevicePtr& device, const coffee::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler);
 
         void updateMeshesInformation();
 
-        const coffee::GPUDevicePtr& device;
+        const coffee::graphics::DevicePtr& device;
         TransformComponent transform {};
         coffee::ModelPtr model = nullptr;
+        std::vector<size_t> visibleMeshes {};
         std::vector<MeshInformation> meshesInformation {};
-        coffee::DescriptorLayoutPtr layout = nullptr;
-        std::vector<coffee::BufferPtr> meshesInformationBuffers {};
-        std::vector<coffee::DescriptorSetPtr> descriptors {};
+        coffee::graphics::DescriptorLayoutPtr layout = nullptr;
+        std::vector<coffee::graphics::BufferPtr> meshesInformationBuffers {};
+        std::vector<coffee::graphics::DescriptorSetPtr> descriptors {};
 
     private:
-        void initialize(const coffee::SamplerPtr& textureSampler);
+        void initialize(const coffee::graphics::SamplerPtr& textureSampler);
     };
 
     using UModel = std::unique_ptr<Model>;

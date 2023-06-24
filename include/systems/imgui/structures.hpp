@@ -20,12 +20,12 @@ namespace editor {
     };
 
     struct BackendPlatformData {
-        const coffee::Window* windowPtr = nullptr;
+        const coffee::graphics::Window* windowPtr = nullptr;
         // This flag must be set to window than took full control over mouse
         // Basically means when window->disableCursor() called
-        const coffee::Window* fullControlWindowPtr = nullptr;
-        const coffee::Window* keyOwnerWindows[static_cast<uint32_t>(coffee::Keys::Last)] {};
-        coffee::CursorPtr cursors[ImGuiMouseCursor_COUNT] {};
+        const coffee::graphics::Window* fullControlWindowPtr = nullptr;
+        const coffee::graphics::Window* keyOwnerWindows[static_cast<uint32_t>(coffee::Keys::Last)] {};
+        coffee::graphics::CursorPtr cursors[ImGuiMouseCursor_COUNT] {};
         ImVec2 lastMousePos {};
         bool wantUpdateMonitors = false;
 
@@ -33,27 +33,27 @@ namespace editor {
     };
 
     struct BackendRendererData {
-        coffee::GPUDevicePtr device = nullptr;
-        coffee::DescriptorLayoutPtr layout = nullptr;
-        coffee::DescriptorSetPtr descriptorSet = nullptr;
-        coffee::RenderPassPtr renderPass = nullptr;
-        coffee::PipelinePtr pipeline = nullptr;
-        coffee::ImagePtr fonts = nullptr;
-        coffee::ImageViewPtr fontsView = nullptr;
-        coffee::SamplerPtr fontsSampler = nullptr;
+        coffee::graphics::DevicePtr device = nullptr;
+        coffee::graphics::DescriptorLayoutPtr layout = nullptr;
+        coffee::graphics::DescriptorSetPtr descriptorSet = nullptr;
+        coffee::graphics::RenderPassPtr renderPass = nullptr;
+        coffee::graphics::PipelinePtr pipeline = nullptr;
+        coffee::graphics::ImagePtr fonts = nullptr;
+        coffee::graphics::ImageViewPtr fontsView = nullptr;
+        coffee::graphics::SamplerPtr fontsSampler = nullptr;
     };
 
     struct ViewportData {
-        coffee::Window* windowHandle;
+        coffee::graphics::Window* windowHandle;
         int32_t ignoreWindowPositionFrameCount = 0;
         int32_t ignoreWindowSizeFrameCount = 0;
     };
 
     struct RendererData {
-        std::vector<coffee::ImageViewPtr> swapChainViews {};
-        std::vector<coffee::FramebufferPtr> framebuffers {};
-        std::vector<coffee::BufferPtr> vertexBuffers {};
-        std::vector<coffee::BufferPtr> indexBuffers {};
+        std::vector<coffee::graphics::ImageViewPtr> swapChainViews {};
+        std::vector<coffee::graphics::FramebufferPtr> framebuffers {};
+        std::vector<coffee::graphics::BufferPtr> vertexBuffers {};
+        std::vector<coffee::graphics::BufferPtr> indexBuffers {};
     };
 
 }

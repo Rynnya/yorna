@@ -16,7 +16,9 @@ namespace editor {
             u8"Views",
             u8"Language",
             u8"New Project",
+            u8"Select Directory",
             u8"Open Project",
+            u8"Select .cfpj file",
             u8"Save Project",
             u8"Close Project",
             u8"Scene Hierarchy",
@@ -29,20 +31,22 @@ namespace editor {
         };
 
         std::array<const char8_t*, localeSize> ruLocale = {
-            u8"����",
-            u8"������",
-            u8"����",
-            u8"����",
-            u8"����� ������",
-            u8"������� ������",
-            u8"��������� ������",
-            u8"������� ������",
-            u8"�������� �����",
-            u8"��� �����",
-            u8"������� �������",
-            u8"��������� ����������� ������ 16:9",
-            u8"���������� ����� �����/FPS",
-            u8"<����������>",
+            u8"Файл",
+            u8"Правка",
+            u8"Виды",
+            u8"Язык",
+            u8"Создать проект",
+            u8"Выберите папку",
+            u8"Открыть проект",
+            u8"Выберите .cfpj файл",
+            u8"Сохранить проект",
+            u8"Закрыть проект",
+            u8"Иерархия сцены",
+            u8"Вид сцены",
+            u8"Просмотр сцены",
+            u8"Поддерживать соотношение сторон 16:9",
+            u8"Показывать время кадра/FPS",
+            u8"<Безымянный>",
             u8"",
         };
     }
@@ -55,10 +59,12 @@ namespace editor {
         Views,
         Language,
         NewProject,
+        SelectDirectory,
         OpenProject,
+        SelectCFPJFile,
         SaveProject,
         CloseProject,
-        HierarchyComponent,
+        SceneHierarchy,
         SceneViewport,
         AssetBrowser,
         KeepAspectRatio,
@@ -72,7 +78,7 @@ namespace editor {
                 return reinterpret_cast<const char*>(detail::ruLocale[static_cast<uint32_t>(name)]);
             default:
                 return reinterpret_cast<const char*>(detail::enLocale[static_cast<uint32_t>(name)]);
-        } 
+        }
     }
 
 }

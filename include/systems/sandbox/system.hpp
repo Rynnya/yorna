@@ -4,8 +4,10 @@
 #include <coffee/coffee.hpp>
 #include <coffee/interfaces/asset_manager.hpp>
 
+#include <array>
 #include <atomic>
 
+#include <systems/shadows/sunlight_shadow.hpp>
 #include <systems/sandbox/structures.hpp>
 
 #include <entities/camera.hpp>
@@ -15,21 +17,24 @@ namespace editor {
 
     class MainSystem {
     public:
-        MainSystem(const coffee::GPUDevicePtr& device, coffee::LoopHandler& loopHandler);
+        MainSystem(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler);
         ~MainSystem();
 
-        void bindWindow(const coffee::Window* window) noexcept;
+        void bindWindow(const coffee::graphics::Window* window) noexcept;
         void unbindWindow() noexcept;
 
         void update();
 
-        void performDepthTest(const coffee::CommandBuffer& commandBuffer);
-        void performRendering(const coffee::CommandBuffer& commandBuffer);
+        void cullMeshes();
+        void performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer);
+        void performRendering(const coffee::graphics::CommandBuffer& commandBuffer);
+
+        coffee::graphics::ImagePtr& image();
 
         std::atomic<float> outputAspect { 1280.0f / 720.0f };
 
-        coffee::DescriptorLayoutPtr outputLayout;
-        coffee::DescriptorSetPtr outputSet;
+        coffee::graphics::DescriptorLayoutPtr outputLayout;
+        coffee::graphics::DescriptorSetPtr outputSet;
 
         Camera camera {};
         TransformComponent viewerObject {};
@@ -52,45 +57,48 @@ namespace editor {
         void updateObjects();
         void updateLightPoints();
 
-        void mousePositionCallback(const coffee::Window& window, const coffee::MouseMoveEvent& e) noexcept;
-        void keyCallback(const coffee::Window& window, const coffee::KeyEvent& e) noexcept;
+        void mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept;
+        void keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept;
 
-        const coffee::GPUDevicePtr& device;
+        const coffee::graphics::DevicePtr& device;
         coffee::LoopHandler& loopHandler;
 
         coffee::AssetManagerPtr assetManager;
         coffee::FilesystemPtr filesystem;
 
-        const coffee::Window* boundWindow = nullptr;
+        SunLightShadow sunlightShadow;
+
+        const coffee::graphics::Window* boundWindow = nullptr;
 
         float lookSpeed = 0.003f;
         float moveSpeed = 10.0f;
         UModel sponzaModel;
 
         std::vector<PointLight> pointLights {};
+        std::vector<SpotLight> spotLights {};
 
         MainPushConstants mainConstants {};
         LightPushConstants lightPointsConstants {};
 
-        coffee::RenderPassPtr earlyDepthPass;
-        coffee::RenderPassPtr renderPass;
-        coffee::PipelinePtr earlyDepthPipeline;
-        coffee::PipelinePtr mainPipeline;
-        coffee::PipelinePtr lightPointsPipeline;
+        coffee::graphics::RenderPassPtr earlyDepthPass;
+        coffee::graphics::RenderPassPtr renderPass;
+        coffee::graphics::PipelinePtr earlyDepthPipeline;
+        coffee::graphics::PipelinePtr mainPipeline;
+        coffee::graphics::PipelinePtr lightPointsPipeline;
 
-        coffee::ImagePtr colorImage;
-        coffee::ImagePtr depthImage;
-        coffee::ImageViewPtr colorImageView;
-        coffee::ImageViewPtr depthImageView;
-        coffee::FramebufferPtr earlyDepthFramebuffer;
-        coffee::FramebufferPtr framebuffer;
+        coffee::graphics::ImagePtr colorImage;
+        coffee::graphics::ImagePtr depthImage;
+        coffee::graphics::ImageViewPtr colorImageView;
+        coffee::graphics::ImageViewPtr depthImageView;
+        coffee::graphics::FramebufferPtr earlyDepthFramebuffer;
+        coffee::graphics::FramebufferPtr framebuffer;
 
-        coffee::SamplerPtr textureSampler;
-        coffee::SamplerPtr outputSampler;
+        coffee::graphics::SamplerPtr textureSampler;
+        coffee::graphics::SamplerPtr outputSampler;
 
-        coffee::DescriptorLayoutPtr gameLayout;
+        coffee::graphics::DescriptorLayoutPtr gameLayout;
 
-        std::vector<FrameInfo> frameInfos {};
+        std::array<FrameInfo, coffee::graphics::Device::kMaxOperationsInFlight> frameInfos {};
         uint32_t frameInfoIndex = 0;
     };
 

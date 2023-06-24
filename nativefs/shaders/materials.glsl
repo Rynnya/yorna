@@ -1,0 +1,12 @@
+#ifndef MATERIALS_GLSL
+#define MATERIALS_GLSL
+
+const uint DIFFUSE_TEXTURE_BIT = 0x1;
+const uint SPECULAR_TEXTURE_BIT = 0x2;
+const uint NORMAL_TEXTURE_BIT = 0x4;
+const uint EMISSIVE_TEXTURE_BIT = 0x8;
+const uint ROUGHNESS_TEXTURE_BIT = 0x10;
+const uint METALLIC_TEXTURE_BIT = 0x20;
+const uint AMBIENT_OCCLUSION_TEXTURE_BIT = 0x40;
+
+#endif

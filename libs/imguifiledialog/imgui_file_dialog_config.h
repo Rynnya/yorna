@@ -2,6 +2,8 @@
 
 // uncomment and modify defines under for customize ImGuiFileDialog
 
+#define IMGUIFILEDIALOG_NO_EXPORT
+
 //#define MAX_FILE_DIALOG_NAME_BUFFER 1024
 //#define MAX_PATH_BUFFER_SIZE 1024
 

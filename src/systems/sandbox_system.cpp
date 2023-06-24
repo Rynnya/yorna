@@ -26,14 +26,13 @@ namespace editor {
         {1.0f, 1.0f, 1.0f, 3.0f}
     };
 
-    MainSystem::MainSystem(const coffee::GPUDevicePtr& device, coffee::LoopHandler& loopHandler)
+    MainSystem::MainSystem(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler)
         : device { device }
         , loopHandler { loopHandler }
         , assetManager { coffee::AssetManager::create(device) }
-        , filesystem { coffee::Filesystem::create("nativefs/") }
+        , filesystem { coffee::Filesystem::create("sponza.fs") }
+        , sunlightShadow { device, assetManager, filesystem, 2048U }
     {
-        frameInfos.resize(device->imageCount());
-
         createSamplers();
         createBuffers();
         createRenderPasses();
@@ -52,20 +51,20 @@ namespace editor {
             frameInfo.mvpBuffer->flush();
         }
 
-        for (size_t i = 0; i < lightColors.size(); i++) {
-            PointLight& object = pointLights.emplace_back(lightColors[i].a, 0.1f, lightColors[i]);
-            auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, (i * glm::two_pi<float>()) / lightColors.size(), { 0.0f, -1.0f, 0.0f });
-            object.transform.translation = glm::vec3(rotateLight * glm::vec4 { -0.5f, 1.0f, -0.5f, 1.0f });
-        }
+        //for (size_t i = 0; i < lightColors.size(); i++) {
+        //    PointLight& pointLight = pointLights.emplace_back(lightColors[i].a, 0.1f, lightColors[i]);
+        //    auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, (i * glm::two_pi<float>()) / lightColors.size(), { 0.0f, -1.0f, 0.0f });
+        //    pointLight.position = glm::vec3(rotateLight * glm::vec4 { -0.5f, 1.0f, -0.5f, 1.0f });
+        //}
 
-        //window.addWindowResizeCallback("main", [this](const coffee::Window&, const coffee::ResizeEvent&) {
+        //window.addWindowResizeCallback("main", [this](const coffee::graphics::Window&, const coffee::graphics::ResizeEvent&) {
         //    createImages();
         //    createFramebuffer();
         //    updateDescriptors();
         //});
 
-        //window.addMouseClickCallback("main", [](const coffee::Window& window, const coffee::MouseClickEvent& e) {
-        //    if (e.button == coffee::MouseButton::Right) {
+        //window.addMouseClickCallback("main", [](const coffee::graphics::Window& window, const coffee::graphics::MouseClickEvent& e) {
+        //    if (e.button == coffee::graphics::MouseButton::Right) {
         //        window.disableCursor();
         //        window.disableTextMode();
         //    }
@@ -76,32 +75,48 @@ namespace editor {
         vkDeviceWaitIdle(device->logicalDevice());
     }
 
-    void MainSystem::bindWindow(const coffee::Window* window) noexcept {
+    void MainSystem::bindWindow(const coffee::graphics::Window* window) noexcept {
         boundWindow = window;
 
         boundWindow->mouseMoveEvent +=
-            coffee::Callback<const coffee::Window&, const coffee::MouseMoveEvent&> { this, & MainSystem::mousePositionCallback };
+            coffee::Callback<const coffee::graphics::Window&, const coffee::MouseMoveEvent&> { this, &MainSystem::mousePositionCallback };
         boundWindow->keyEvent +=
-            coffee::Callback<const coffee::Window&, const coffee::KeyEvent&> { this, & MainSystem::keyCallback };
+            coffee::Callback<const coffee::graphics::Window&, const coffee::KeyEvent&> { this, &MainSystem::keyCallback };
     }
 
     void MainSystem::unbindWindow() noexcept {
         if (boundWindow != nullptr) {
             boundWindow->mouseMoveEvent -=
-                coffee::Callback<const coffee::Window&, const coffee::MouseMoveEvent&> { this, & MainSystem::mousePositionCallback };
+                coffee::Callback<const coffee::graphics::Window&, const coffee::MouseMoveEvent&> { this, &MainSystem::mousePositionCallback };
             boundWindow->keyEvent -=
-                coffee::Callback<const coffee::Window&, const coffee::KeyEvent&> { this, & MainSystem::keyCallback };
+                coffee::Callback<const coffee::graphics::Window&, const coffee::KeyEvent&> { this, &MainSystem::keyCallback };
 
             boundWindow = nullptr;
         }
     }
 
     void MainSystem::update() {
+        cullMeshes();
         updateObjects();
         updateLightPoints();
     }
 
-    void MainSystem::performDepthTest(const coffee::CommandBuffer& commandBuffer) {
+    void MainSystem::cullMeshes()
+    {
+        auto& meshes = sponzaModel->model->meshes;
+        auto& visibleMeshes = sponzaModel->visibleMeshes;
+        auto sponzaMat4 = sponzaModel->transform.mat4();
+
+        visibleMeshes.clear();
+
+        for (size_t i = 0; i < meshes.size(); i++) {
+            if (camera.isInFrustum(sponzaMat4, meshes[i].aabb)) {
+                visibleMeshes.push_back(i);
+            }
+        }
+    }
+
+    void MainSystem::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer) {
         const VkRect2D renderArea = {
             .extent = {
                 .width = depthImage->extent.width, 
@@ -116,45 +131,60 @@ namespace editor {
             .maxDepth = 1.0f
         };
 
-        const auto sponzaMat4 = sponzaModel->transform.mat4();
-        const auto& frameInfo = frameInfos[frameInfoIndex];
+        auto& meshes = sponzaModel->model->meshes;
+        auto& visibleMeshes = sponzaModel->visibleMeshes;
+        auto& frameInfo = frameInfos[frameInfoIndex];
+        auto sponzaMat4 = sponzaModel->transform.mat4();
 
         commandBuffer.beginRenderPass(earlyDepthPass, earlyDepthFramebuffer, renderArea, depthClearValues.size(), depthClearValues.data());
         commandBuffer.setViewport(viewport);
         commandBuffer.setScissor(renderArea);
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline, 1, &frameInfo.descriptorSet->set());
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline, frameInfo.descriptorSet);
         commandBuffer.pushConstants(earlyDepthPipeline, VK_SHADER_STAGE_VERTEX_BIT, sizeof(sponzaMat4), &sponzaMat4);
-        sponzaModel->model->bind(commandBuffer);
-        sponzaModel->model->draw(commandBuffer);
+        commandBuffer.bindModel(sponzaModel->model);
+
+        for (size_t meshID : visibleMeshes) {
+            commandBuffer.drawMesh(meshes[meshID]);
+        }
 
         commandBuffer.endRenderPass();
     }
 
-    void MainSystem::performRendering(const coffee::CommandBuffer& commandBuffer) {
+    void MainSystem::performRendering(const coffee::graphics::CommandBuffer& commandBuffer) {
+        auto& meshes = sponzaModel->model->meshes;
+        auto& visibleMeshes = sponzaModel->visibleMeshes;
+        auto& frameInfo = frameInfos[frameInfoIndex];
+        const auto& currentLightBuffer = frameInfo.lightUbo;
+        auto sponzaMat4 = sponzaModel->transform.mat4();
+
+        SunLightShadow::PushConstants shadowConstants {
+            .lightSpaceMatrix = frameInfos[frameInfoIndex].lightUbo.sunlightSpaceMatrix,
+            .modelMatrix = sponzaModel->transform.mat4()
+        };
+
+        sunlightShadow.beginRender(commandBuffer);
+        commandBuffer.pushConstants(sunlightShadow.pipeline(), VK_SHADER_STAGE_VERTEX_BIT, sizeof(shadowConstants), &shadowConstants);
+        commandBuffer.bindModel(sponzaModel->model);
+        commandBuffer.drawModel(sponzaModel->model);
+        sunlightShadow.endRender(commandBuffer);
+
         const VkRect2D renderArea = {
             .extent = {
                 .width = depthImage->extent.width,
-                .height = depthImage->extent.height 
+                .height = depthImage->extent.height
             }
         };
 
-        const VkViewport viewport = {
+        commandBuffer.beginRenderPass(renderPass, framebuffer, renderArea, normalClearValues.size(), normalClearValues.data());
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline);
+        commandBuffer.setViewport({
             .width = static_cast<float>(renderArea.extent.width),
             .height = static_cast<float>(renderArea.extent.height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f
-        };
-
-        const auto sponzaMat4 = sponzaModel->transform.mat4();
-        const auto& meshes = sponzaModel->model->meshes;
-        const auto& frameInfo = frameInfos[frameInfoIndex];
-        const auto& currentLightBuffer = frameInfo.lightUbo;
-
-        commandBuffer.beginRenderPass(renderPass, framebuffer, renderArea, normalClearValues.size(), normalClearValues.data());
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline);
-        commandBuffer.setViewport(viewport);
+        });
         commandBuffer.setScissor(renderArea);
 
         mainConstants.transform = sponzaMat4;
@@ -164,26 +194,32 @@ namespace editor {
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
             sizeof(mainConstants),
             &mainConstants);
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, frameInfo.descriptorSet);
+        commandBuffer.bindModel(sponzaModel->model);
 
-        std::array<VkDescriptorSet, 2> sets {};
-        sets[0] = frameInfo.descriptorSet->set();
-        sponzaModel->model->bind(commandBuffer);
-
-        for (size_t i = 0; i < meshes.size(); i++) {
-            sets[1] = sponzaModel->descriptors[i]->set();
-            commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, sets.size(), sets.data());
-
-            meshes[i].draw(commandBuffer);
+        for (size_t meshID : visibleMeshes) {
+            commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, sponzaModel->descriptors[meshID], 1);
+            commandBuffer.drawMesh(meshes[meshID]);
         }
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, lightPointsPipeline);
-        commandBuffer.setViewport(viewport);
-        commandBuffer.setScissor(renderArea);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, lightPointsPipeline, 1, &frameInfo.descriptorSet->set());
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, lightPointsPipeline, frameInfo.descriptorSet);
 
-        for (uint32_t i = 0; i < currentLightBuffer.size; i++) {
-            lightPointsConstants.position = currentLightBuffer.lightPoints[i].position;
-            lightPointsConstants.color = currentLightBuffer.lightPoints[i].color;
+        for (uint32_t i = 0; i < currentLightBuffer.amountOfPointLights; i++) {
+            lightPointsConstants.position = currentLightBuffer.pointLights[i].position;
+            lightPointsConstants.color = currentLightBuffer.pointLights[i].color;
+
+            commandBuffer.pushConstants(
+                lightPointsPipeline,
+                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                sizeof(lightPointsConstants),
+                &lightPointsConstants);
+            commandBuffer.draw(6);
+        }
+
+        for (uint32_t i = 0; i < currentLightBuffer.amountOfSpotLights; i++) {
+            lightPointsConstants.position = currentLightBuffer.spotLights[i].position;
+            lightPointsConstants.color = currentLightBuffer.spotLights[i].color;
 
             commandBuffer.pushConstants(
                 lightPointsPipeline,
@@ -194,12 +230,17 @@ namespace editor {
         }
 
         commandBuffer.endRenderPass();
-        frameInfoIndex = (frameInfoIndex + 1) % device->imageCount();
+        frameInfoIndex = (frameInfoIndex + 1) % coffee::graphics::Device::kMaxOperationsInFlight;
+    }
+
+    coffee::graphics::ImagePtr& MainSystem::image() {
+        return colorImage;
     }
 
     void MainSystem::updateCamera() {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
         camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
+        camera.recalculateFrustumPlanes();
 
         auto& frameInfo = frameInfos[frameInfoIndex];
         frameInfo.mvpUbo.projection = camera.projection();
@@ -239,23 +280,34 @@ namespace editor {
 
     void MainSystem::updateLightPoints() {
         auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, loopHandler.deltaTime(), { 0.0f, -1.0f, 0.0f });
-        auto& frameInfo = frameInfos[frameInfoIndex];
+        auto& lightUbo = frameInfos[frameInfoIndex].lightUbo;
+
+        lightUbo.sunlightSpaceMatrix = sunlightShadow.camera().projection() * sunlightShadow.camera().view();
+        lightUbo.sunlightDirection = glm::vec4 { sunlightShadow.lightObject().direction, 1.0f };
+        lightUbo.sunlightColor = glm::vec4 { sunlightShadow.lightObject().color, 1.0f };
+
+        lightUbo.amountOfPointLights = static_cast<uint32_t>(pointLights.size());
+        lightUbo.amountOfSpotLights = static_cast<uint32_t>(spotLights.size());
 
         for (size_t i = 0; i < pointLights.size(); i++) {
-            pointLights[i].transform.translation = glm::vec3(rotateLight * glm::vec4 { pointLights[i].transform.translation, 1.0f });
+            pointLights[i].position = glm::vec3(rotateLight * glm::vec4 { pointLights[i].position, 1.0f });
 
-            frameInfo.lightUbo.lightPoints[i].position = glm::vec4(pointLights[i].transform.translation, pointLights[i].transform.scale.r);
-            frameInfo.lightUbo.lightPoints[i].color = glm::vec4(pointLights[i].color, pointLights[i].intensity);
+            lightUbo.pointLights[i].position = glm::vec4(pointLights[i].position, 0.1f);
+            lightUbo.pointLights[i].color = glm::vec4(pointLights[i].color, pointLights[i].intensity);
         }
 
-        frameInfo.lightUbo.size = static_cast<uint32_t>(pointLights.size());
+        for (size_t i = 0; i < spotLights.size(); i++) {
+            lightUbo.spotLights[i].position = glm::vec4(spotLights[i].position, 0.1f);
+            lightUbo.spotLights[i].color = glm::vec4(spotLights[i].color, spotLights[i].intensity);
+            lightUbo.spotLights[i].coneDirection = glm::vec4(spotLights[i].coneDirection, spotLights[i].coneAngle);
+        }
 
-        std::memcpy(frameInfo.lightBuffer->memory(), &frameInfo.lightUbo, sizeof(frameInfo.lightUbo));
-        frameInfo.lightBuffer->flush();
+        std::memcpy(frameInfos[frameInfoIndex].lightBuffer->memory(), &lightUbo, sizeof(lightUbo));
+        frameInfos[frameInfoIndex].lightBuffer->flush();
     }
 
     void MainSystem::createSamplers() {
-        textureSampler = coffee::Sampler::create(device, {
+        textureSampler = coffee::graphics::Sampler::create(device, {
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -267,7 +319,7 @@ namespace editor {
             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK
         });
 
-        outputSampler = coffee::Sampler::create(device, {
+        outputSampler = coffee::graphics::Sampler::create(device, {
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -282,7 +334,7 @@ namespace editor {
 
     void MainSystem::createBuffers() {
         for (auto& frameInfo : frameInfos) {
-            frameInfo.mvpBuffer = coffee::Buffer::create(device, {
+            frameInfo.mvpBuffer = coffee::graphics::Buffer::create(device, {
                 .instanceSize = sizeof(MVPUniformBuffer),
                 .instanceCount = 1U,
                 .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -290,7 +342,7 @@ namespace editor {
                 .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
             });
 
-            frameInfo.lightBuffer = coffee::Buffer::create(device, {
+            frameInfo.lightBuffer = coffee::graphics::Buffer::create(device, {
                 .instanceSize = sizeof(LightUniformBuffer),
                 .instanceCount = 1U,
                 .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -308,8 +360,8 @@ namespace editor {
     }
 
     void MainSystem::createRenderPasses() {
-        earlyDepthPass = coffee::RenderPass::create(device, {
-            .depthStencilAttachment = coffee::AttachmentConfiguration {
+        earlyDepthPass = coffee::graphics::RenderPass::create(device, {
+            .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
                 .format = device->optimalDepthFormat(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -320,9 +372,9 @@ namespace editor {
             }
         });
 
-        renderPass = coffee::RenderPass::create(device, {
-            .colorAttachments = { coffee::AttachmentConfiguration {
-                .format = device->surfaceFormat().format,
+        renderPass = coffee::graphics::RenderPass::create(device, {
+            .colorAttachments = { coffee::graphics::AttachmentConfiguration {
+                .format = device->surfaceFormat(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -330,7 +382,7 @@ namespace editor {
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
             }},
-            .depthStencilAttachment = coffee::AttachmentConfiguration {
+            .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
                 .format = device->optimalDepthFormat(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -343,20 +395,20 @@ namespace editor {
     }
 
     void MainSystem::createPipelines() {
-        earlyDepthPipeline = coffee::Pipeline::create(device, earlyDepthPass, {
-            .shaders = coffee::utils::moveList<coffee::ShaderPtr, std::vector<coffee::ShaderPtr>>({
+        earlyDepthPipeline = coffee::graphics::Pipeline::create(device, earlyDepthPass, {
+            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
                 assetManager->getShader(filesystem, "shaders/early_depth.vert.spv", VK_SHADER_STAGE_VERTEX_BIT)
             }),
             .layouts = {
                 gameLayout
             },
-            .inputBindings = { coffee::InputBinding {
+            .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0U,
                 .stride = sizeof(coffee::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = coffee::Vertex::getElementDescriptions()
             }},
-            .constantRanges = { coffee::PushConstantRange { 
+            .constantRanges = { coffee::graphics::PushConstantRange { 
                 .stages = VK_SHADER_STAGE_VERTEX_BIT, 
                 .size = static_cast<uint32_t>(sizeof(glm::mat4))
             }},
@@ -368,22 +420,22 @@ namespace editor {
             }
         });
 
-        mainPipeline = coffee::Pipeline::create(device, renderPass, {
-            .shaders = coffee::utils::moveList<coffee::ShaderPtr, std::vector<coffee::ShaderPtr>>({
-                assetManager->getShader(filesystem, "shaders/base.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-                assetManager->getShader(filesystem, "shaders/base.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+        mainPipeline = coffee::graphics::Pipeline::create(device, renderPass, {
+            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
+                assetManager->getShader(filesystem, "shaders/forward.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+                assetManager->getShader(filesystem, "shaders/forward.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
             }),
             .layouts = {
                 gameLayout,
                 sponzaModel->layout
             },
-            .inputBindings = { coffee::InputBinding {
+            .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0U,
                 .stride = sizeof(coffee::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = coffee::Vertex::getElementDescriptions()
             }},
-            .constantRanges = { coffee::PushConstantRange {
+            .constantRanges = { coffee::graphics::PushConstantRange {
                 .stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 .size = static_cast<uint32_t>(sizeof(MainPushConstants))
             }},
@@ -395,15 +447,15 @@ namespace editor {
             }
         });
 
-        lightPointsPipeline = coffee::Pipeline::create(device, renderPass, {
-            .shaders = coffee::utils::moveList<coffee::ShaderPtr, std::vector<coffee::ShaderPtr>>({
+        lightPointsPipeline = coffee::graphics::Pipeline::create(device, renderPass, {
+            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
                 assetManager->getShader(filesystem, "shaders/point_light.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
                 assetManager->getShader(filesystem, "shaders/point_light.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
             }),
             .layouts = {
                 gameLayout
             },
-            .constantRanges = { coffee::PushConstantRange {
+            .constantRanges = { coffee::graphics::PushConstantRange {
                 .stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 .size = static_cast<uint32_t>(sizeof(LightPushConstants))
             }},
@@ -417,20 +469,20 @@ namespace editor {
     }
 
     void MainSystem::createImages() {
-        colorImage = coffee::Image::create(device, {
+        colorImage = coffee::graphics::Image::create(device, {
             .imageType = VK_IMAGE_TYPE_2D,
-            .format = device->surfaceFormat().format,
+            .format = device->surfaceFormat(),
             .extent = { 1920U, 1080U },
             .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             .allocationFlags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             .priority = 1.0f
         });
-        colorImageView = coffee::ImageView::create(colorImage, {
+        colorImageView = coffee::graphics::ImageView::create(colorImage, {
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = device->surfaceFormat().format
+            .format = device->surfaceFormat()
         });
 
-        depthImage = coffee::Image::create(device, {
+        depthImage = coffee::graphics::Image::create(device, {
             .imageType = VK_IMAGE_TYPE_2D,
             .format = device->optimalDepthFormat(),
             .extent = { 1920U, 1080U },
@@ -438,7 +490,7 @@ namespace editor {
             .allocationFlags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             .priority = 1.0f
         });
-        depthImageView = coffee::ImageView::create(depthImage, {
+        depthImageView = coffee::graphics::ImageView::create(depthImage, {
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = device->optimalDepthFormat(),
             .subresourceRange = {
@@ -452,12 +504,12 @@ namespace editor {
     }
 
     void MainSystem::createFramebuffer() {
-        earlyDepthFramebuffer = coffee::Framebuffer::create(device, earlyDepthPass, {
+        earlyDepthFramebuffer = coffee::graphics::Framebuffer::create(device, earlyDepthPass, {
             .extent = { depthImage->extent.width, depthImage->extent.height },
             .depthStencilView = depthImageView
         });
 
-        framebuffer = coffee::Framebuffer::create(device, renderPass, {
+        framebuffer = coffee::graphics::Framebuffer::create(device, renderPass, {
             .extent = { colorImage->extent.width, colorImage->extent.height },
             .colorViews = { colorImageView },
             .depthStencilView = depthImageView
@@ -466,33 +518,35 @@ namespace editor {
 
     void MainSystem::updateDescriptors() {
         outputSet->updateDescriptor(
-            coffee::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
+            coffee::graphics::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
     }
 
     void MainSystem::createDescriptors() {
-        gameLayout = coffee::DescriptorLayout::create(device, {
-            { 0, {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 1, {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
+        gameLayout = coffee::graphics::DescriptorLayout::create(device, {
+            { 0, { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
+            { 1, { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } },
+            { 2, { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
         });
 
-        outputLayout = coffee::DescriptorLayout::create(device, {
+        outputLayout = coffee::graphics::DescriptorLayout::create(device, {
             { 0, {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
         });
 
         for (auto& frameInfo : frameInfos) {
-            coffee::DescriptorWriter writer = coffee::DescriptorWriter(gameLayout)
+            coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter(gameLayout)
                 .addBuffer(0, frameInfo.mvpBuffer)
-                .addBuffer(1, frameInfo.lightBuffer);
+                .addBuffer(1, frameInfo.lightBuffer)
+                .addImage(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, sunlightShadow.depthMapView(), sunlightShadow.shadowSampler());
 
-            frameInfo.descriptorSet = coffee::DescriptorSet::create(device, writer);
+            frameInfo.descriptorSet = coffee::graphics::DescriptorSet::create(device, writer);
         }
 
-        outputSet = coffee::DescriptorSet::create(device,
-            coffee::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
+        outputSet = coffee::graphics::DescriptorSet::create(device,
+            coffee::graphics::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
     }
 
-    void MainSystem::mousePositionCallback(const coffee::Window& window, const coffee::MouseMoveEvent& e) noexcept {
-        if (window.cursorState() != coffee::CursorState::Disabled) {
+    void MainSystem::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept {
+        if (window.cursorState() != coffee::graphics::CursorState::Disabled) {
             return;
         }
 
@@ -503,7 +557,7 @@ namespace editor {
             glm::mod(viewerObject.rotation.y + lookSpeed * (e.x - mousePosition.x), glm::two_pi<float>());
     }
 
-    void MainSystem::keyCallback(const coffee::Window& window, const coffee::KeyEvent& e) noexcept {
+    void MainSystem::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept {
         switch (e.key) {
             case coffee::Keys::Escape:
                 window.showCursor();

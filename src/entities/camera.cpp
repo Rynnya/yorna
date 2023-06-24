@@ -1,7 +1,8 @@
 #include <entities/camera.hpp>
 
 #include <coffee/utils/log.hpp>
-#include <glm/ext/matrix_clip_space.hpp>
+
+#include <glm/ext/scalar_constants.hpp>
 
 namespace editor {
 
@@ -123,6 +124,65 @@ namespace editor {
         inverseViewMatrix_[3][0] = position.x;
         inverseViewMatrix_[3][1] = position.y;
         inverseViewMatrix_[3][2] = position.z;
+    }
+
+    void Camera::recalculateFrustumPlanes() noexcept {
+        viewProjection_ = projectionMatrix_ * viewMatrix_;
+
+        frustumPlanes_[0].x = viewProjection_[0].w + viewProjection_[0].x;
+        frustumPlanes_[0].y = viewProjection_[1].w + viewProjection_[1].x;
+        frustumPlanes_[0].z = viewProjection_[2].w + viewProjection_[2].x;
+        frustumPlanes_[0].w = viewProjection_[3].w + viewProjection_[3].x;
+
+        frustumPlanes_[1].x = viewProjection_[0].w - viewProjection_[0].x;
+        frustumPlanes_[1].y = viewProjection_[1].w - viewProjection_[1].x;
+        frustumPlanes_[1].z = viewProjection_[2].w - viewProjection_[2].x;
+        frustumPlanes_[1].w = viewProjection_[3].w - viewProjection_[3].x;
+
+        frustumPlanes_[2].x = viewProjection_[0].w - viewProjection_[0].y;
+        frustumPlanes_[2].y = viewProjection_[1].w - viewProjection_[1].y;
+        frustumPlanes_[2].z = viewProjection_[2].w - viewProjection_[2].y;
+        frustumPlanes_[2].w = viewProjection_[3].w - viewProjection_[3].y;
+
+        frustumPlanes_[3].x = viewProjection_[0].w + viewProjection_[0].y;
+        frustumPlanes_[3].y = viewProjection_[1].w + viewProjection_[1].y;
+        frustumPlanes_[3].z = viewProjection_[2].w + viewProjection_[2].y;
+        frustumPlanes_[3].w = viewProjection_[3].w + viewProjection_[3].y;
+
+        frustumPlanes_[4].x = viewProjection_[0].w + viewProjection_[0].z;
+        frustumPlanes_[4].y = viewProjection_[1].w + viewProjection_[1].z;
+        frustumPlanes_[4].z = viewProjection_[2].w + viewProjection_[2].z;
+        frustumPlanes_[4].w = viewProjection_[3].w + viewProjection_[3].z;
+
+        frustumPlanes_[5].x = viewProjection_[0].w - viewProjection_[0].z;
+        frustumPlanes_[5].y = viewProjection_[1].w - viewProjection_[1].z;
+        frustumPlanes_[5].z = viewProjection_[2].w - viewProjection_[2].z;
+        frustumPlanes_[5].w = viewProjection_[3].w - viewProjection_[3].z;
+
+        for (size_t i = 0; i < kAmountOfPlanes; i++) {
+            frustumPlanes_[i] /= glm::length(glm::vec3 { frustumPlanes_[i] });
+        }
+    }
+
+    bool Camera::isInFrustum(const glm::mat4& modelMatrix, const coffee::AABB& aabb) const noexcept {
+        coffee::AABBPoints points = aabb.transform(modelMatrix);
+
+        for (size_t i = 0; i < kAmountOfPlanes; i++) {
+            bool inside = false;
+
+            for (size_t j = 0; j < coffee::AABBPoints::kAmountOfPoints; j++) {
+                if (glm::dot(frustumPlanes_[i], points[j]) > 0.0f) {
+                    inside = true;
+                    break;
+                }
+            }
+
+            if (!inside) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     const glm::mat4& Camera::projection() const noexcept {

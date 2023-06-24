@@ -15,7 +15,10 @@
 
 namespace editor {
 
-    constexpr uint32_t timestampQueryCount = 4U;
+    constexpr uint32_t singleTimestampQuery = 2U;
+    constexpr uint32_t timestampQueryCount = 2U * singleTimestampQuery;
+    constexpr float timestampToMillseconds = 1000000.0f;
+    constexpr float bytesToMegabytes = 1000000.0f;
 
     constexpr std::array<VkClearValue, 1> clearValues = { VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } } };
 
@@ -239,11 +242,11 @@ namespace editor {
         }
     }
 
-    ImGuiSystem::ImGuiSystem(const coffee::GPUDevicePtr& device, coffee::LoopHandler& loopHandler)
+    ImGuiSystem::ImGuiSystem(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler)
         : device { device }
         , loopHandler { loopHandler }
     {
-        applicationWindow = coffee::Window::create(device, {
+        applicationWindow = coffee::graphics::Window::create(device, {
             .extent = { 1280U, 720U },
             .presentMode = presentMode
         });
@@ -272,11 +275,9 @@ namespace editor {
 
     void ImGuiSystem::run()
     {
-        loopHandler.setFramerateLimit(1440.0f);
-
         auto gameThreadWork = [this]() {
             BackendPlatformData* platformData = static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
-            coffee::CommandBuffer commandBuffer = coffee::CommandBuffer::createGraphics(device);
+            coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(device);
 
             resetQueryPool(commandBuffer);
             platformData->gameSystem->update();
@@ -293,9 +294,7 @@ namespace editor {
         };
 
         tbb::task_group gameLoopTask {};
-
         applicationWindow->showWindow();
-        std::chrono::system_clock::time_point loopBeginTime {};
 
         while (!applicationWindow->shouldClose()) {
             loopHandler.pollEvents();
@@ -304,23 +303,29 @@ namespace editor {
                 loopHandler.pollEvents(1.0 / 60.0);
             }
 
-            loopBeginTime = std::chrono::system_clock::now();
+            auto loopBeginTime = std::chrono::system_clock::now();
 
-            this->update(loopHandler.deltaTime());
+            float deltaTime = loopHandler.deltaTime();
+            this->update(deltaTime);
 
             gameLoopTask.run(gameThreadWork);
             this->prepareImGui();
             this->render();
 
+            auto imGuiTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - loopBeginTime).count();
+
             gameLoopTask.wait();
             device->submitPendingWork();
 
-            sceneViewport.averageCPUTime[sceneViewport.statisticIndex] =
-                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - loopBeginTime).count();
+            auto& gameSystem = static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->gameSystem;
+            sceneViewport.averageFPS[sceneViewport.statisticIndex] = 1.0f / deltaTime;
+            sceneViewport.averageFrameTime[sceneViewport.statisticIndex] = 1000.0f * deltaTime;
+            sceneViewport.averageImGuiTime[sceneViewport.statisticIndex] = imGuiTime;
+            writeTimestampResults();
 
             loopHandler.waitFramelimit();
 
-            sceneViewport.statisticIndex = (sceneViewport.statisticIndex + 1) % SceneViewport::averageStatisticBufferSize;
+            sceneViewport.statisticIndex = (sceneViewport.statisticIndex + 1) % SceneViewport::kAverageStatisticBufferSize;
         }
     }
 
@@ -355,7 +360,7 @@ namespace editor {
         ImGuiIO& io = ImGui::GetIO();
 
         if (acquired) {
-            coffee::CommandBuffer commandBuffer = coffee::CommandBuffer::createGraphics(device);
+            coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(device);
             this->render(ImGui::GetMainViewport(), commandBuffer);
             applicationWindow->sendCommandBuffer(std::move(commandBuffer));
         }
@@ -366,7 +371,7 @@ namespace editor {
         }
     }
 
-    void ImGuiSystem::render(ImGuiViewport* viewport, const coffee::CommandBuffer& commandBuffer)
+    void ImGuiSystem::render(ImGuiViewport* viewport, const coffee::graphics::CommandBuffer& commandBuffer)
     {
         BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
         ViewportData* viewportData = static_cast<ViewportData*>(viewport->PlatformUserData);
@@ -390,22 +395,22 @@ namespace editor {
             size_t vertexSize = data->TotalVtxCount * sizeof(ImDrawVert);
             size_t indexSize = data->TotalIdxCount * sizeof(ImDrawIdx);
 
-            coffee::BufferPtr& vertexBuffer = rendererData->vertexBuffers[frameIndex];
-            coffee::BufferPtr& indexBuffer = rendererData->indexBuffers[frameIndex];
+            coffee::graphics::BufferPtr& vertexBuffer = rendererData->vertexBuffers[frameIndex];
+            coffee::graphics::BufferPtr& indexBuffer = rendererData->indexBuffers[frameIndex];
 
             if (vertexBuffer == nullptr || (vertexBuffer->instanceSize * vertexBuffer->instanceCount) < vertexSize) {
                 if (vertexBuffer != nullptr) {
                     vertexBuffer->unmap();
                 }
 
-                coffee::BufferConfiguration configuration {};
+                coffee::graphics::BufferConfiguration configuration {};
                 configuration.instanceSize = sizeof(ImDrawVert);
                 configuration.instanceCount = data->TotalVtxCount;
                 configuration.usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
                 configuration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
                 configuration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-                vertexBuffer = coffee::Buffer::create(backendData->device, configuration);
+                vertexBuffer = coffee::graphics::Buffer::create(backendData->device, configuration);
                 vertexBuffer->map();
             }
 
@@ -414,14 +419,14 @@ namespace editor {
                     indexBuffer->unmap();
                 }
 
-                coffee::BufferConfiguration configuration {};
+                coffee::graphics::BufferConfiguration configuration {};
                 configuration.instanceSize = sizeof(ImDrawIdx);
                 configuration.instanceCount = data->TotalIdxCount;
                 configuration.usageFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
                 configuration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
                 configuration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-                indexBuffer = coffee::Buffer::create(backendData->device, configuration);
+                indexBuffer = coffee::graphics::Buffer::create(backendData->device, configuration);
                 indexBuffer->map();
             }
 
@@ -446,7 +451,7 @@ namespace editor {
         }
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, 1, &backendData->descriptorSet->set());
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, backendData->descriptorSet);
         commandBuffer.setViewport({ .width = framebufferWidth, .height = framebufferHeight, .minDepth = 0.0f, .maxDepth = 1.0f });
 
         ImGuiPushConstant constants {};
@@ -487,8 +492,10 @@ namespace editor {
                 }
 
                 if (command.TextureId != nullptr) {
-                    commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline,
-                        1, &reinterpret_cast<const VkDescriptorSet&>(command.TextureId));
+                    commandBuffer.bindDescriptorSets(
+                        VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                        backendData->pipeline, 
+                        *reinterpret_cast<const coffee::graphics::DescriptorSetPtr*>(command.TextureId));
                 }
 
                 commandBuffer.setScissor({
@@ -505,8 +512,7 @@ namespace editor {
 
                 // We must restore default descriptor set
                 if (command.TextureId != nullptr) {
-                    commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline,
-                        1, &backendData->descriptorSet->set());
+                    commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, backendData->descriptorSet);
                 }
             }
 
@@ -540,24 +546,24 @@ namespace editor {
         BackendPlatformData* backendData = static_cast<BackendPlatformData*>(io.BackendPlatformUserData = new BackendPlatformData {});
         backendData->gameSystem = std::make_unique<editor::MainSystem>(device, loopHandler);
 
-        backendData->cursors[ImGuiMouseCursor_Arrow] =      coffee::Cursor::create(coffee::CursorType::Arrow);
-        backendData->cursors[ImGuiMouseCursor_TextInput] =  coffee::Cursor::create(coffee::CursorType::TextInput);
-        backendData->cursors[ImGuiMouseCursor_Hand] =       coffee::Cursor::create(coffee::CursorType::Hand);
-        backendData->cursors[ImGuiMouseCursor_ResizeEW] =   coffee::Cursor::create(coffee::CursorType::ResizeEW);
-        backendData->cursors[ImGuiMouseCursor_ResizeNS] =   coffee::Cursor::create(coffee::CursorType::ResizeNS);
-        backendData->cursors[ImGuiMouseCursor_ResizeNWSE] = coffee::Cursor::create(coffee::CursorType::ResizeNWSE);
-        backendData->cursors[ImGuiMouseCursor_ResizeNESW] = coffee::Cursor::create(coffee::CursorType::ResizeNESW);
-        backendData->cursors[ImGuiMouseCursor_ResizeAll] =  coffee::Cursor::create(coffee::CursorType::ResizeAll);
-        backendData->cursors[ImGuiMouseCursor_NotAllowed] = coffee::Cursor::create(coffee::CursorType::NotAllowed);
+        backendData->cursors[ImGuiMouseCursor_Arrow] =      coffee::graphics::Cursor::create(coffee::graphics::CursorType::Arrow);
+        backendData->cursors[ImGuiMouseCursor_TextInput] =  coffee::graphics::Cursor::create(coffee::graphics::CursorType::TextInput);
+        backendData->cursors[ImGuiMouseCursor_Hand] =       coffee::graphics::Cursor::create(coffee::graphics::CursorType::Hand);
+        backendData->cursors[ImGuiMouseCursor_ResizeEW] =   coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeEW);
+        backendData->cursors[ImGuiMouseCursor_ResizeNS] =   coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeNS);
+        backendData->cursors[ImGuiMouseCursor_ResizeNWSE] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeNWSE);
+        backendData->cursors[ImGuiMouseCursor_ResizeNESW] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeNESW);
+        backendData->cursors[ImGuiMouseCursor_ResizeAll] =  coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeAll);
+        backendData->cursors[ImGuiMouseCursor_NotAllowed] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::NotAllowed);
 
         ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
         updateMonitors();
 
-        coffee::Monitor::monitorConnectedEvent += [](const coffee::MonitorPtr&) {
+        coffee::graphics::Monitor::monitorConnectedEvent += [](const coffee::graphics::MonitorPtr&) {
             static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->wantUpdateMonitors = true;
         };
 
-        coffee::Monitor::monitorDisconnectedEvent += [](const coffee::MonitorPtr&) {
+        coffee::graphics::Monitor::monitorDisconnectedEvent += [](const coffee::graphics::MonitorPtr&) {
             static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->wantUpdateMonitors = true;
         };
 
@@ -567,7 +573,7 @@ namespace editor {
             BackendRendererData* backendRendererData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
             ViewportData* viewportData = new ViewportData {
-                .windowHandle = coffee::Window::create(backendRendererData->device, {
+                .windowHandle = coffee::graphics::Window::create(backendRendererData->device, {
                     .extent = { .width = static_cast<uint32_t>(viewport->Size.x), .height = static_cast<uint32_t>(viewport->Size.y) },
                     .presentMode = presentMode,
                     .hiddenOnStart = true
@@ -577,7 +583,7 @@ namespace editor {
 
             viewport->PlatformUserData = viewportData;
 
-            coffee::Window* window = viewportData->windowHandle;
+            coffee::graphics::Window* window = viewportData->windowHandle;
 
             window->userData = viewport->ID;
             window->setWindowPosition({ static_cast<int32_t>(viewport->Pos.x), static_cast<int32_t>(viewport->Pos.y) });
@@ -590,7 +596,7 @@ namespace editor {
             window->keyEvent += keyCallback;
             window->charEvent += charCallback;
 
-            window->windowPositionEvent += [](const coffee::Window& window, const coffee::WindowPositionEvent& e) {
+            window->windowPositionEvent += [](const coffee::graphics::Window& window, const coffee::WindowPositionEvent& e) {
                 if (ImGuiViewport* viewport = ImGui::FindViewportByID(std::any_cast<ImGuiID>(window.userData))) {
                     if (ImGui::GetFrameCount() <= static_cast<ViewportData*>(viewport->PlatformUserData)->ignoreWindowPositionFrameCount + 1) {
                         return;
@@ -600,7 +606,7 @@ namespace editor {
                 }
             };
 
-            window->windowResizeEvent += [](const coffee::Window& window, const coffee::ResizeEvent& e) {
+            window->windowResizeEvent += [](const coffee::graphics::Window& window, const coffee::ResizeEvent& e) {
                 if (ImGuiViewport* viewport = ImGui::FindViewportByID(std::any_cast<ImGuiID>(window.userData))) {
                     BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
                     ViewportData* viewportData = static_cast<ViewportData*>(viewport->PlatformUserData);
@@ -611,12 +617,12 @@ namespace editor {
                     rendererData->framebuffers.resize(presentImages.size());
 
                     for (size_t i = 0; i < presentImages.size(); i++) {
-                        rendererData->swapChainViews[i] = coffee::ImageView::create(presentImages[i], {
+                        rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
                             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                            .format = backendData->device->surfaceFormat().format
+                            .format = backendData->device->surfaceFormat()
                         });
 
-                        rendererData->framebuffers[i] = coffee::Framebuffer::create(backendData->device, backendData->renderPass, {
+                        rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
                             .extent = viewportData->windowHandle->framebufferSize(),
                             .colorViews = { rendererData->swapChainViews[i] }
                         });
@@ -630,7 +636,7 @@ namespace editor {
                 }
             };
 
-            window->windowCloseEvent += [](const coffee::Window& window) {
+            window->windowCloseEvent += [](const coffee::graphics::Window& window) {
                 if (ImGuiViewport* viewport = ImGui::FindViewportByID(std::any_cast<ImGuiID>(window.userData))) {
                     viewport->PlatformRequestClose = true;
                 }
@@ -696,7 +702,7 @@ namespace editor {
         };
 
         platformIO.Platform_GetWindowPos = [](ImGuiViewport* viewport) -> ImVec2 {
-            coffee::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
+            coffee::graphics::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
             VkOffset2D windowPosition = window->windowPosition();
             return { static_cast<float>(windowPosition.x), static_cast<float>(windowPosition.y) };
         };
@@ -708,7 +714,7 @@ namespace editor {
         };
 
         platformIO.Platform_GetWindowSize = [](ImGuiViewport* viewport) -> ImVec2 {
-            coffee::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
+            coffee::graphics::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
             VkExtent2D windowSize = window->windowSize();
             return { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
         };
@@ -738,18 +744,18 @@ namespace editor {
             BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
             RendererData* rendererData = static_cast<RendererData*>(viewport->RendererUserData = new RendererData {});
 
-            coffee::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
+            coffee::graphics::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
             const auto& presentImages = window->presentImages();
             rendererData->swapChainViews.resize(presentImages.size());
             rendererData->framebuffers.resize(presentImages.size());
 
             for (size_t i = 0; i < presentImages.size(); i++) {
-                rendererData->swapChainViews[i] = coffee::ImageView::create(presentImages[i], {
+                rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                    .format = backendData->device->surfaceFormat().format
+                    .format = backendData->device->surfaceFormat()
                 });
 
-                rendererData->framebuffers[i] = coffee::Framebuffer::create(backendData->device, backendData->renderPass, {
+                rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
                     .extent = window->framebufferSize(),
                     .colorViews = { rendererData->swapChainViews[i] } 
                 });
@@ -769,7 +775,7 @@ namespace editor {
             ViewportData* viewportData = static_cast<ViewportData*>(viewport->PlatformUserData);
 
             if (viewportData->windowHandle->acquireNextImage()) {
-                coffee::CommandBuffer commandBuffer = coffee::CommandBuffer::createGraphics(backendData->device);
+                coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(backendData->device);
                 ImGuiSystem::render(viewport, commandBuffer);
                 viewportData->windowHandle->sendCommandBuffer(std::move(commandBuffer));
             }
@@ -783,7 +789,7 @@ namespace editor {
         applicationWindow->keyEvent += keyCallback;
         applicationWindow->charEvent += charCallback;
 
-        applicationWindow->windowResizeEvent += [](const coffee::Window& window, const coffee::ResizeEvent& e) {
+        applicationWindow->windowResizeEvent += [](const coffee::graphics::Window& window, const coffee::ResizeEvent& e) {
             BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
             ViewportData* viewportData = static_cast<ViewportData*>(ImGui::GetMainViewport()->PlatformUserData);
             RendererData* rendererData = static_cast<RendererData*>(ImGui::GetMainViewport()->RendererUserData);
@@ -793,12 +799,12 @@ namespace editor {
             rendererData->framebuffers.resize(presentImages.size());
 
             for (size_t i = 0; i < presentImages.size(); i++) {
-                rendererData->swapChainViews[i] = coffee::ImageView::create(presentImages[i], {
+                rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                    .format = backendData->device->surfaceFormat().format 
+                    .format = backendData->device->surfaceFormat() 
                 });
 
-                rendererData->framebuffers[i] = coffee::Framebuffer::create(backendData->device, backendData->renderPass, {
+                rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
                     .extent = viewportData->windowHandle->framebufferSize(), 
                     .colorViews = { rendererData->swapChainViews[i] } 
                 });
@@ -849,12 +855,12 @@ namespace editor {
         rendererData->framebuffers.resize(presentImages.size());
 
         for (size_t i = 0; i < presentImages.size(); i++) {
-            rendererData->swapChainViews[i] = coffee::ImageView::create(presentImages[i], {
+            rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = backendData->device->surfaceFormat().format 
+                .format = backendData->device->surfaceFormat() 
             });
 
-            rendererData->framebuffers[i] = coffee::Framebuffer::create(backendData->device, backendData->renderPass, {
+            rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
                 .extent = applicationWindow->framebufferSize(), 
                 .colorViews = { rendererData->swapChainViews[i] }
             });
@@ -875,7 +881,7 @@ namespace editor {
         fontConfiguration.OversampleH = 1;
         fontConfiguration.OversampleV = 1;
         fontConfiguration.PixelSnapH = true;
-        fontConfiguration.GlyphOffset.y = 1.0f * std::floor(fontConfiguration.SizePixels / 13.0f);
+        fontConfiguration.GlyphOffset.y = std::floor(fontConfiguration.SizePixels / 13.0f);
 
         io.Fonts->AddFontFromMemoryCompressedBase85TTF(
             FiraFontInBase85,
@@ -889,7 +895,7 @@ namespace editor {
 
         BackendRendererData* backendData = static_cast<BackendRendererData*>(io.BackendRendererUserData);
 
-        backendData->fontsSampler = coffee::Sampler::create(backendData->device, {
+        backendData->fontsSampler = coffee::graphics::Sampler::create(backendData->device, {
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
@@ -900,7 +906,7 @@ namespace editor {
             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK
         });
 
-        backendData->fonts = coffee::Image::create(backendData->device, {
+        backendData->fonts = coffee::graphics::Image::create(backendData->device, {
             .imageType = VK_IMAGE_TYPE_2D,
             .format = VK_FORMAT_R8_UNORM,
             .extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) },
@@ -909,7 +915,7 @@ namespace editor {
             .priority = 1.0f
         });
 
-        coffee::BufferPtr stagingBuffer = coffee::Buffer::create(backendData->device, {
+        coffee::graphics::BufferPtr stagingBuffer = coffee::graphics::Buffer::create(backendData->device, {
             .instanceSize = static_cast<uint32_t>(width * height),
             .instanceCount = 1U,
             .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -924,9 +930,9 @@ namespace editor {
         }
         stagingBuffer->unmap();
 
-        coffee::SingleTime::copyBufferToImage(device, backendData->fonts, stagingBuffer);
+        coffee::graphics::SingleTime::copyBufferToImage(device, backendData->fonts, stagingBuffer);
 
-        backendData->fontsView = coffee::ImageView::create(backendData->fonts, {
+        backendData->fontsView = coffee::graphics::ImageView::create(backendData->fonts, {
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = VK_FORMAT_R8_UNORM,
             .components = {
@@ -942,12 +948,12 @@ namespace editor {
     {
         BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
-        const std::map<uint32_t, coffee::DescriptorBindingInfo> bindings {
+        const std::map<uint32_t, coffee::graphics::DescriptorBindingInfo> bindings {
             { 0, { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
         };
 
-        backendData->layout = coffee::DescriptorLayout::create(device, bindings);
-        backendData->descriptorSet = coffee::DescriptorSet::create(device, coffee::DescriptorWriter(backendData->layout)
+        backendData->layout = coffee::graphics::DescriptorLayout::create(device, bindings);
+        backendData->descriptorSet = coffee::graphics::DescriptorSet::create(device, coffee::graphics::DescriptorWriter(backendData->layout)
             .addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, backendData->fontsView, backendData->fontsSampler));
     }
 
@@ -955,9 +961,9 @@ namespace editor {
     {
         BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
-        backendData->renderPass = coffee::RenderPass::create(device, {
-            .colorAttachments = { coffee::AttachmentConfiguration {
-                .format = device->surfaceFormat().format,
+        backendData->renderPass = coffee::graphics::RenderPass::create(device, {
+            .colorAttachments = { coffee::graphics::AttachmentConfiguration {
+                .format = device->surfaceFormat(),
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -973,25 +979,25 @@ namespace editor {
     {
         BackendRendererData* backendData = static_cast<BackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
-        backendData->pipeline = coffee::Pipeline::create(device, backendData->renderPass, {
-            .shaders = coffee::utils::moveList<coffee::ShaderPtr, std::vector<coffee::ShaderPtr>>({
-                coffee::ShaderModule::create(device, imguiVertexShader, VK_SHADER_STAGE_VERTEX_BIT),
-                coffee::ShaderModule::create(device, imguiFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+        backendData->pipeline = coffee::graphics::Pipeline::create(device, backendData->renderPass, {
+            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
+                coffee::graphics::ShaderModule::create(device, imguiVertexShader, VK_SHADER_STAGE_VERTEX_BIT),
+                coffee::graphics::ShaderModule::create(device, imguiFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
             }),
             .layouts = {
                 backendData->layout
             },
-            .inputBindings = { coffee::InputBinding {
+            .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0U,
                 .stride = sizeof(ImDrawVert),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = { 
-                    coffee::InputElement { .location = 0U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, pos) },
-                    coffee::InputElement { .location = 1U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, uv) },
-                    coffee::InputElement { .location = 2U, .format = VK_FORMAT_R8G8B8A8_UNORM, .offset = offsetof(ImDrawVert, col) } 
+                    coffee::graphics::InputElement { .location = 0U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, pos) },
+                    coffee::graphics::InputElement { .location = 1U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, uv) },
+                    coffee::graphics::InputElement { .location = 2U, .format = VK_FORMAT_R8G8B8A8_UNORM, .offset = offsetof(ImDrawVert, col) } 
                 }
             }},
-            .constantRanges = { coffee::PushConstantRange {
+            .constantRanges = { coffee::graphics::PushConstantRange {
                 .stages = VK_SHADER_STAGE_VERTEX_BIT,
                 .size = static_cast<uint32_t>(sizeof(ImGuiPushConstant)) 
             }},
@@ -1015,15 +1021,15 @@ namespace editor {
         });
     }
 
-    void ImGuiSystem::focusCallback(const coffee::Window& window, const coffee::WindowFocusEvent& e)
+    void ImGuiSystem::focusCallback(const coffee::graphics::Window& window, const coffee::WindowFocusEvent& e)
     {
         ImGuiIO& io = ImGui::GetIO();
         io.AddFocusEvent(!e.lost);
     }
 
-    void ImGuiSystem::enterCallback(const coffee::Window& window, const coffee::WindowEnterEvent& e)
+    void ImGuiSystem::enterCallback(const coffee::graphics::Window& window, const coffee::WindowEnterEvent& e)
     {
-        if (window.cursorState() == coffee::CursorState::Disabled) {
+        if (window.cursorState() == coffee::graphics::CursorState::Disabled) {
             return;
         }
 
@@ -1043,7 +1049,7 @@ namespace editor {
         }
     }
 
-    void ImGuiSystem::mouseClickCallback(const coffee::Window& window, const coffee::MouseClickEvent& e)
+    void ImGuiSystem::mouseClickCallback(const coffee::graphics::Window& window, const coffee::MouseClickEvent& e)
     {
         ImGuiIO& io = ImGui::GetIO();
 
@@ -1058,7 +1064,7 @@ namespace editor {
         }
     }
 
-    void ImGuiSystem::mousePositionCallback(const coffee::Window& window, const coffee::MouseMoveEvent& e)
+    void ImGuiSystem::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e)
     {
         ImGuiIO& io = ImGui::GetIO();
         BackendPlatformData* backendData = static_cast<BackendPlatformData*>(io.BackendPlatformUserData);
@@ -1076,13 +1082,13 @@ namespace editor {
         backendData->lastMousePos = { xPosition, yPosition };
     }
 
-    void ImGuiSystem::mouseWheelCallback(const coffee::Window& window, const coffee::MouseWheelEvent& e)
+    void ImGuiSystem::mouseWheelCallback(const coffee::graphics::Window& window, const coffee::MouseWheelEvent& e)
     {
         ImGuiIO& io = ImGui::GetIO();
         io.AddMouseWheelEvent(e.x, e.y);
     }
 
-    void ImGuiSystem::keyCallback(const coffee::Window& window, const coffee::KeyEvent& e)
+    void ImGuiSystem::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e)
     {
         if (e.state != coffee::State::Press && e.state != coffee::State::Release) {
             return;
@@ -1103,7 +1109,7 @@ namespace editor {
         io.SetKeyEventNativeData(key, static_cast<int>(e.key), static_cast<int>(e.scancode));
     }
 
-    void ImGuiSystem::charCallback(const coffee::Window& window, char32_t ch)
+    void ImGuiSystem::charCallback(const coffee::graphics::Window& window, char32_t ch)
     {
         ImGuiIO& io = ImGui::GetIO();
         io.AddInputCharacter(ch);
@@ -1114,14 +1120,14 @@ namespace editor {
         ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
         platformIO.Monitors.resize(0);
 
-        for (const auto& monitor : coffee::Monitor::monitors()) {
+        for (const auto& monitor : coffee::graphics::Monitor::monitors()) {
             ImGuiPlatformMonitor imGuiMonitor {};
 
             VkExtent2D position = monitor->position();
             imGuiMonitor.MainPos = imGuiMonitor.WorkPos =
                 ImVec2 { static_cast<float>(position.width), static_cast<float>(position.height) };
 
-            coffee::VideoMode videoMode = monitor->currentVideoMode();
+            coffee::graphics::VideoMode videoMode = monitor->currentVideoMode();
             imGuiMonitor.MainSize = imGuiMonitor.WorkSize =
                 ImVec2 { static_cast<float>(videoMode.width), static_cast<float>(videoMode.height) };
 
@@ -1138,7 +1144,7 @@ namespace editor {
         }
     }
 
-    void ImGuiSystem::updateMouse(const coffee::WindowPtr& applicationWindow)
+    void ImGuiSystem::updateMouse(const coffee::graphics::WindowPtr& applicationWindow)
     {
         ImGuiIO& io = ImGui::GetIO();
         ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
@@ -1159,7 +1165,7 @@ namespace editor {
 
         for (int32_t i = 0; i < platformIO.Viewports.Size; i++) {
             ImGuiViewport* viewport = platformIO.Viewports[i];
-            coffee::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
+            coffee::graphics::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
 
             if (window->isFocused()) {
                 if (io.WantSetMousePos) {
@@ -1194,7 +1200,7 @@ namespace editor {
         }
     }
 
-    void ImGuiSystem::updateCursor(const coffee::WindowPtr& applicationWindow)
+    void ImGuiSystem::updateCursor(const coffee::graphics::WindowPtr& applicationWindow)
     {
         ImGuiIO& io = ImGui::GetIO();
 
@@ -1208,7 +1214,7 @@ namespace editor {
 
         for (int32_t i = 0; i < platformIO.Viewports.Size; i++) {
             ImGuiViewport* viewport = platformIO.Viewports[i];
-            coffee::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
+            coffee::graphics::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
 
             if (cursor == ImGuiMouseCursor_None || io.MouseDrawCursor) {
                 window->hideCursor();
@@ -1234,54 +1240,74 @@ namespace editor {
     void ImGuiSystem::destroyQueryPool()
     {
         if (timestampQueryPool != VK_NULL_HANDLE) {
+            device->waitForRelease();
+
             vkDestroyQueryPool(device->logicalDevice(), timestampQueryPool, nullptr);
         }
     }
 
-    void ImGuiSystem::resetQueryPool(const coffee::CommandBuffer& commandBuffer)
+    void ImGuiSystem::resetQueryPool(const coffee::graphics::CommandBuffer& commandBuffer)
     {
-        if (timestampQueryPool != VK_NULL_HANDLE) {
+        if (timestampQueryPool != VK_NULL_HANDLE && beginTimestampWrites.empty() && endTimestampWrites.empty()) {
             vkCmdResetQueryPool(commandBuffer, timestampQueryPool, 0, timestampQueryCount);
         }
     }
 
-    void ImGuiSystem::beginTimestamp(const coffee::CommandBuffer& commandBuffer, uint32_t index)
+    void ImGuiSystem::beginTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index)
     {
         if (timestampQueryPool != VK_NULL_HANDLE) {
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampQueryPool, 2 * index);
+            for (auto& beginWrite : beginTimestampWrites) {
+                if (beginWrite == index) {
+                    return;
+                }
+            }
+
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, timestampQueryPool, singleTimestampQuery * index);
+            beginTimestampWrites.push_back(index);
         }
     }
 
-    void ImGuiSystem::endTimestamp(const coffee::CommandBuffer& commandBuffer, uint32_t index)
+    void ImGuiSystem::endTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index)
     {
         if (timestampQueryPool != VK_NULL_HANDLE) {
-            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampQueryPool, 2 * index + 1);
+            for (auto& endWrite : endTimestampWrites) {
+                if (endWrite == index) {
+                    return;
+                }
+            }
+
+            vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, timestampQueryPool, singleTimestampQuery * index + 1);
+            endTimestampWrites.push_back(index);
         }
     }
 
-    float ImGuiSystem::getTimestampResult(uint32_t index)
+    void ImGuiSystem::writeTimestampResults()
     {
         if (timestampQueryPool == VK_NULL_HANDLE) {
-            return 0;
+            return;
         }
 
-        uint64_t results[2] {};
+        uint64_t results[timestampQueryCount] {};
         VkResult result = vkGetQueryPoolResults(
             device->logicalDevice(),
             timestampQueryPool,
-            2 * index,
-            2,
+            0,
+            timestampQueryCount,
             sizeof(results),
             results,
             sizeof(uint64_t),
-            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT
+            VK_QUERY_RESULT_64_BIT
         );
 
         if (result == VK_SUCCESS) {
-            return (results[1] - results[0]) * device->properties().limits.timestampPeriod;
-        }
+            sceneViewport.averageDepthPass[sceneViewport.statisticIndex]
+                = (results[1] - results[0]) * device->properties().limits.timestampPeriod / timestampToMillseconds;
+            sceneViewport.averageRendering[sceneViewport.statisticIndex]
+                = (results[3] - results[2]) * device->properties().limits.timestampPeriod / timestampToMillseconds;
 
-        return 0;
+            beginTimestampWrites.clear();
+            endTimestampWrites.clear();
+        }
     }
 
     bool ImGuiSystem::isAnyWindowActive()
@@ -1353,11 +1379,20 @@ namespace editor {
                 std::string extension = path.extension().string();
 
                 switch (coffee::utils::fnv1a::digest(extension.data())) {
-                    case coffee::utils::fnv1a::digest(".cfz"):
+                    case coffee::utils::fnv1a::digest(".basis"):
+                    case coffee::utils::fnv1a::digest(".ktx2"):
                         newEntry.type = DirectoryObject::Type::Texture;
                         break;
                     case coffee::utils::fnv1a::digest(".cfa"):
                         newEntry.type = DirectoryObject::Type::Mesh;
+                        break;
+                    case coffee::utils::fnv1a::digest(".vert"):
+                    case coffee::utils::fnv1a::digest(".frag"):
+                    case coffee::utils::fnv1a::digest(".glsl"):
+                        newEntry.type = DirectoryObject::Type::Shader;
+                        break;
+                    case coffee::utils::fnv1a::digest(".spv"):
+                        newEntry.type = DirectoryObject::Type::CompiledShader;
                         break;
                     default:
                         break;
@@ -1398,9 +1433,7 @@ namespace editor {
 
             bool opened = ImGui::TreeNode(
                 reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<std::underlying_type_t<entt::entity>>(entity))),
-                hierachyComponent.tag.data(),
-                hierachyComponent.tag.data() + hierachyComponent.tag.size(),
-                flags
+                hierachyComponent.tag.data(), hierachyComponent.tag.data() + hierachyComponent.tag.size(), flags
             );
 
             if (ImGui::BeginPopupContextItem(nullptr, ImGuiMouseButton_Right)) {
@@ -1437,8 +1470,10 @@ namespace editor {
                         previousChildHierarchyComponent->previous = child;
                     }
 
-                    sceneHierarchy.components.emplace<PointLight>(child).transform =
-                        static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->gameSystem->viewerObject;
+                    BackendPlatformData* backendData = static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+                    auto& pointLight = sceneHierarchy
+                        .components.emplace<PointLight>(entity);
+                    pointLight.position = backendData->gameSystem->viewerObject.translation;
                 }
 
                 if (ImGui::MenuItem("New Spot Light")) {
@@ -1456,25 +1491,10 @@ namespace editor {
                         previousChildHierarchyComponent->previous = child;
                     }
 
-                    // TODO: sceneHierarchy.components.emplace<SpotLight>();
-                }
-
-                if (ImGui::MenuItem("New Directional Light")) {
-                    const auto child = sceneHierarchy.components.create();
-
-                    entt::entity previousChild = hierachyComponent.firstChild;
-                    hierachyComponent.firstChild = child;
-
-                    auto& childHierarchyComponent = sceneHierarchy.components.emplace<HierarchyComponent>(child);
-                    childHierarchyComponent.parent = entity;
-                    childHierarchyComponent.next = previousChild;
-                    childHierarchyComponent.tag = "Directional Light";
-
-                    if (auto* previousChildHierarchyComponent = sceneHierarchy.components.try_get<HierarchyComponent>(previousChild)) {
-                        previousChildHierarchyComponent->previous = child;
-                    }
-
-                    // TODO: sceneHierarchy.components.emplace<DirectionalLight>();
+                    BackendPlatformData* backendData = static_cast<BackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+                    auto& spotLight = sceneHierarchy.components
+                        .emplace<SpotLight>(entity, 30.0f, backendData->gameSystem->viewerObject.rotation);
+                    spotLight.position = backendData->gameSystem->viewerObject.translation;
                 }
 
                 if (ImGui::MenuItem("Rename")) {
@@ -1578,12 +1598,12 @@ namespace editor {
             if (ImGui::BeginMainMenuBar()) {
                 if (ImGui::BeginMenu(localizeName(LocaleName::File), !projectInformation.dialog.IsOpened())) {
                     if (ImGui::MenuItem(localizeName(LocaleName::NewProject))) {
-                        projectInformation.dialog.OpenDialog("CreateProjectDialog", "Select dictionary", nullptr, ".");
+                        projectInformation.dialog.OpenDialog("CreateProjectDialog", localizeName(LocaleName::SelectDirectory), nullptr, ".");
                         projectInformation.loaded = true;
                     }
 
                     if (ImGui::MenuItem(localizeName(LocaleName::OpenProject))) {
-                        projectInformation.dialog.OpenDialog("LoadProjectDialog", "Select .cfpj file", ".cfpj", ".");
+                        projectInformation.dialog.OpenDialog("LoadProjectDialog", localizeName(LocaleName::SelectCFPJFile), ".cfpj", ".");
                     }
 
                     if (ImGui::MenuItem(localizeName(LocaleName::SaveProject))) {
@@ -1622,7 +1642,7 @@ namespace editor {
                 }
 
                 if (ImGui::BeginMenu(localizeName(LocaleName::Views))) {
-                    ImGui::MenuItem(localizeName(LocaleName::HierarchyComponent), nullptr, &sceneHierarchy.active, projectInformation.loaded);
+                    ImGui::MenuItem(localizeName(LocaleName::SceneHierarchy), nullptr, &sceneHierarchy.active, projectInformation.loaded);
                     ImGui::MenuItem(localizeName(LocaleName::SceneViewport), nullptr, &sceneViewport.active, projectInformation.loaded);
                     ImGui::MenuItem(localizeName(LocaleName::AssetBrowser), nullptr, &assetBrowser.active, projectInformation.loaded);
 
@@ -1635,7 +1655,7 @@ namespace editor {
                         IGFDLocale::currentLocale = CurrentLocale::EN;
                     }
 
-                    if (ImGui::MenuItem(reinterpret_cast<const char*>(u8"�������"), nullptr, currentLocale == CurrentLocale::RU)) {
+                    if (ImGui::MenuItem(reinterpret_cast<const char*>(u8"Русский"), nullptr, currentLocale == CurrentLocale::RU)) {
                         currentLocale = CurrentLocale::RU;
                         IGFDLocale::currentLocale = CurrentLocale::RU;
                     }
@@ -1657,7 +1677,7 @@ namespace editor {
             }
 
             if (sceneHierarchy.active) {
-                std::string sceneHierarchyName = std::format("{}###HierarchyViewport", localizeName(LocaleName::HierarchyComponent));
+                std::string sceneHierarchyName = std::format("{}###HierarchyViewport", localizeName(LocaleName::SceneHierarchy));
                 ImGui::Begin(sceneHierarchyName.data(), &sceneHierarchy.active);
 
                 if (ImGui::BeginPopupContextWindow("SceneHierarchyRightClick", ImGuiPopupFlags_MouseButtonRight)) {
@@ -1681,7 +1701,10 @@ namespace editor {
                         hierarchyComponent.tag = "Point Light";
 
                         sceneHierarchy.components.emplace<EntityRoot>(entity);
-                        sceneHierarchy.components.emplace<PointLight>(entity).transform = backendData->gameSystem->viewerObject;
+
+                        auto& pointLight = sceneHierarchy
+                            .components.emplace<PointLight>(entity);
+                        pointLight.position = backendData->gameSystem->viewerObject.translation;
                     }
 
                     if (ImGui::MenuItem("New Spot Light")) {
@@ -1693,19 +1716,9 @@ namespace editor {
 
                         sceneHierarchy.components.emplace<EntityRoot>(entity);
 
-                        // TODO: sceneHierarchy.components.emplace<SpotLight>();
-                    }
-
-                    if (ImGui::MenuItem("New Directional Light")) {
-                        const auto entity = sceneHierarchy.components.create();
-
-                        auto& hierarchyComponent = sceneHierarchy.components.emplace<HierarchyComponent>(entity);
-                        hierarchyComponent.parent = entt::null;
-                        hierarchyComponent.tag = "Directional Light";
-
-                        sceneHierarchy.components.emplace<EntityRoot>(entity);
-
-                        // TODO: sceneHierarchy.components.emplace<DirectionalLight>();
+                        auto& spotLight = sceneHierarchy.components
+                            .emplace<SpotLight>(entity, 30.0f, backendData->gameSystem->viewerObject.rotation);
+                        spotLight.position = backendData->gameSystem->viewerObject.translation;
                     }
 
                     ImGui::EndPopup();
@@ -1731,24 +1744,23 @@ namespace editor {
 
                 ImVec2 currentCursorPosition = ImGui::GetCursorScreenPos();
                 ImVec2 contentRegion = ImGui::GetContentRegionAvail();
-                backendData->gameSystem->outputAspect.store(
-                    sceneViewport.keepAspectRatio ? 16.0f / 9.0f : contentRegion.x / contentRegion.y,
-                    std::memory_order_relaxed
-                );
+
+                backendData->gameSystem->outputAspect
+                    .store(sceneViewport.keepAspectRatio ? 16.0f / 9.0f : contentRegion.x / contentRegion.y, std::memory_order_relaxed);
 
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 0.0f, 0.0f });
 
                 if (ImGui::ImageButton(
-                        "VP1: Take control",
-                        framebufferImage->set(),
-                        contentRegion,
-                        ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_PressedOnClick
+                    "VP1: Take control",
+                    &framebufferImage,
+                    contentRegion,
+                    ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_PressedOnClick
                 )) {
                     if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                         // TODO: ?
                     }
                     else {
-                        coffee::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
+                        coffee::graphics::Window* window = static_cast<ViewportData*>(viewport->PlatformUserData)->windowHandle;
 
                         backendData->fullControlWindowPtr = window;
                         backendData->gameSystem->bindWindow(window);
@@ -1759,51 +1771,41 @@ namespace editor {
 
                 ImGui::PopStyleVar();
 
-                constexpr float timestampToMillseconds = 1000000.0f;
-                constexpr float bytesToMegabytes = 1000000.0f;
-
-                sceneViewport.averageFrameTime[sceneViewport.statisticIndex] = 1000.0f * io.DeltaTime;
-                sceneViewport.averageFPS[sceneViewport.statisticIndex] = io.Framerate;
-                sceneViewport.averageDepthPass[sceneViewport.statisticIndex] = getTimestampResult(0) / timestampToMillseconds;
-                sceneViewport.averageRendering[sceneViewport.statisticIndex] = getTimestampResult(1) / timestampToMillseconds;
-
                 if (sceneViewport.outputFramerateAndFPS) {
                     ImVec2 textPosition = { currentCursorPosition.x + 10, currentCursorPosition.y + 10 };
 
-                    std::string framerateAndFPS = std::format(
-                        "{:.3f} ms/frame ({:.1f} FPS)",
-                        calculateAverage(sceneViewport.averageFrameTime),
-                        calculateAverage(sceneViewport.averageFPS)
-                    );
+                    std::string framerateAndFPS = std::format("{:.3f} ms/frame ({:.1f} FPS)", 
+                        calculateAverage(sceneViewport.averageFrameTime), calculateAverage(sceneViewport.averageFPS));
                     ImGui::GetWindowDrawList()->AddText(
-                        textPosition,
-                        IM_COL32(0, 255, 0, 255),
-                        framerateAndFPS.data(),
-                        framerateAndFPS.data() + framerateAndFPS.size()
-                    );
+                        textPosition, IM_COL32(0, 255, 0, 255), framerateAndFPS.data(), framerateAndFPS.data() + framerateAndFPS.size());
 
                     textPosition.y += 15;
-                    std::string cpuTime = std::format("CPU: {:.6f} ms", calculateAverage(sceneViewport.averageCPUTime));
-                    ImGui::GetWindowDrawList()->AddText(textPosition, IM_COL32(0, 255, 0, 255), cpuTime.data(), cpuTime.data() + cpuTime.size());
+                    std::string imguiCPUTime = std::format("ImGUI CPU: {:.6f} ms",
+                        calculateAverage(sceneViewport.averageImGuiTime));
+                    ImGui::GetWindowDrawList()->AddText(
+                        textPosition, IM_COL32(0, 255, 0, 255), imguiCPUTime.data(), imguiCPUTime.data() + imguiCPUTime.size());
 
                     textPosition.y += 15;
-                    std::string depthPass = std::format("Depth pass: {:.6f} ms", calculateAverage(sceneViewport.averageDepthPass));
-                    ImGui::GetWindowDrawList()->AddText(textPosition, IM_COL32(0, 255, 0, 255), depthPass.data(), depthPass.data() + depthPass.size());
+                    std::string depthPass = std::format("Depth pass: {:.6f} ms",
+                        calculateAverage(sceneViewport.averageDepthPass));
+                    ImGui::GetWindowDrawList()->AddText(
+                        textPosition, IM_COL32(0, 255, 0, 255), depthPass.data(), depthPass.data() + depthPass.size());
 
                     textPosition.y += 15;
-                    std::string rendering = std::format("Rendering: {:.6f} ms", calculateAverage(sceneViewport.averageRendering));
-                    ImGui::GetWindowDrawList()->AddText(textPosition, IM_COL32(0, 255, 0, 255), rendering.data(), rendering.data() + rendering.size());
+                    std::string rendering = std::format("Rendering: {:.6f} ms", 
+                        calculateAverage(sceneViewport.averageRendering));
+                    ImGui::GetWindowDrawList()->AddText(
+                        textPosition, IM_COL32(0, 255, 0, 255), rendering.data(), rendering.data() + rendering.size());
 
                     textPosition.y += 15;
                     std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets = device->heapBudgets();
 
-                    if (sceneViewport.deviceHeapIndex != SceneViewport::invalidHeapIndex) {
+                    if (sceneViewport.deviceHeapIndex != SceneViewport::kInvalidHeapIndex) {
                         VmaBudget& budget = budgets[sceneViewport.deviceHeapIndex];
-                        float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.f;
+                        float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.0f;
 
                         textPosition.y += 15;
-                        std::string overallUsage = std::format(
-                            "VRAM: {:.2f}/{:.2f} mb ({:.2f}%)",
+                        std::string overallUsage = std::format("VRAM: {:.2f}/{:.2f} mb ({:.2f}%)",
                             budget.usage / bytesToMegabytes,
                             budget.budget / bytesToMegabytes,
                             percentage
@@ -1817,9 +1819,9 @@ namespace editor {
                         );
                     }
 
-                    if (sceneViewport.hostHeapIndex != SceneViewport::invalidHeapIndex) {
+                    if (sceneViewport.hostHeapIndex != SceneViewport::kInvalidHeapIndex) {
                         VmaBudget& budget = budgets[sceneViewport.hostHeapIndex];
-                        float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.f;
+                        float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.0f;
 
                         textPosition.y += 15;
                         std::string overallUsage = std::format(
@@ -1837,9 +1839,9 @@ namespace editor {
                         );
                     }
 
-                    if (sceneViewport.sharedHeapIndex != SceneViewport::invalidHeapIndex) {
+                    if (sceneViewport.sharedHeapIndex != SceneViewport::kInvalidHeapIndex) {
                         VmaBudget& budget = budgets[sceneViewport.sharedHeapIndex];
-                        float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.f;
+                        float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.0f;
 
                         textPosition.y += 15;
                         std::string overallUsage = std::format(
@@ -1873,7 +1875,7 @@ namespace editor {
                 ImVec2 originalContentRegion = ImGui::GetContentRegionAvail();
                 ImVec2 remainingContentRegion = originalContentRegion;
 
-                for (size_t i = 0; i < assetBrowser.content.size(); i++) {
+                for (size_t i = 0; i < assetBrowser.content.size() && !assetBrowser.updateRequired; i++) {
                     DirectoryObject& directoryObject = assetBrowser.content[i];
                     ImVec2 cursorPosition = ImGui::GetCursorScreenPos();
 
@@ -1889,6 +1891,7 @@ namespace editor {
                     }
 
                     switch (directoryObject.type) {
+                        default:
                         case DirectoryObject::Type::Unknown:
                             ImGui::DrawUnknownFileIcon(drawList, cursorPosition);
                             break;

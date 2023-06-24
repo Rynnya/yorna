@@ -1,55 +1,70 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.11...3.25)
+cmake_minimum_required(VERSION 3.11...3.25)
 
-SET(PROJECT_NAME coffee-editor)
-SET(SHADERS_PROJECT shaders-recompile)
-PROJECT(${PROJECT_NAME} CXX)
+set(PROJECT_NAME coffee-editor)
+set(SHADERS_PROJECT shaders-recompile)
+project(${PROJECT_NAME} CXX)
 
-SET(CMAKE_CXX_STANDARD 20)
-SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
-SET(SHADERS_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders")
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+set(SHADERS_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders")
 
-FILE(GLOB_RECURSE SOURCES
+file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui-cmake.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/CMakeLists.txt")
+file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog.cpp")
+file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog.h")
+file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog_config.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog_config.h")
+file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog_def.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog_def.h")
+execute_process(COMMAND cmd /C "cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch" OUTPUT_QUIET ERROR_QUIET)
+
+add_subdirectory(engine)
+add_subdirectory(libs/imgui)
+
+find_package(Vulkan)
+
+file(GLOB_RECURSE SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.vert"
     "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.frag")
 
-FILE(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui-cmake.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/CMakeLists.txt")
-FILE(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog.cpp")
-FILE(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog.h")
-FILE(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog_config.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog_config.h")
-FILE(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog_def.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog_def.h")
-EXECUTE_PROCESS(COMMAND cmd /C "cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch" OUTPUT_QUIET ERROR_QUIET)
-
-ADD_SUBDIRECTORY(engine)
-ADD_SUBDIRECTORY(libs/imgui)
-
-FIND_PACKAGE(Vulkan)
-
-ADD_EXECUTABLE(${PROJECT_NAME} ${SOURCES})
-TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PRIVATE
+add_executable(${PROJECT_NAME} ${SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/entt"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/nlohmann")
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} PRIVATE coffee-engine fmt::fmt glfw glm::glm imgui)
-SET_TARGET_PROPERTIES(${PROJECT_NAME} imgui PROPERTIES VS_GLOBAL_VcpkgEnabled FALSE)
-SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-SET_PROPERTY(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT "${PROJECT_NAME}")
+target_link_libraries(${PROJECT_NAME} PRIVATE coffee-engine imgui)
 
-FILE(GLOB_RECURSE SHADERS_SOURCES "${SHADERS_FOLDER}/*.vert" "${SHADERS_FOLDER}/*.frag")
-FOREACH(SOURCE IN ITEMS ${SHADERS_SOURCES})
-    ADD_CUSTOM_COMMAND(OUTPUT "${SOURCE}.spv" COMMAND ${SHADERS_FOLDER}/compile_shader.bat "${SOURCE}" DEPENDS "${SOURCE}" VERBATIM)
-    LIST(APPEND DEPENDENCIES_SHADERS "${SOURCE}.spv")
-ENDFOREACH()
-ADD_CUSTOM_TARGET(${SHADERS_PROJECT} DEPENDS ${DEPENDENCIES_SHADERS})
-ADD_DEPENDENCIES(${PROJECT_NAME} ${SHADERS_PROJECT})
-LIST(APPEND SOURCES ${SHADERS_SOURCES})
+file(GLOB_RECURSE SHADERS_SOURCES "${SHADERS_FOLDER}/*.vert" "${SHADERS_FOLDER}/*.frag")
+foreach(SOURCE IN ITEMS ${SHADERS_SOURCES})
+    add_custom_command(OUTPUT "${SOURCE}.spv" COMMAND ${SHADERS_FOLDER}/compile_shader.bat "${SOURCE}" DEPENDS "${SOURCE}" VERBATIM)
+    list(APPEND DEPENDENCIES_SHADERS "${SOURCE}.spv")
+endforeach()
+add_custom_target(${SHADERS_PROJECT} DEPENDS ${DEPENDENCIES_SHADERS})
+add_dependencies(${PROJECT_NAME} ${SHADERS_PROJECT})
+list(APPEND SOURCES ${SHADERS_SOURCES})
 
-FOREACH(SOURCE IN ITEMS ${SOURCES})
-	GET_FILENAME_COMPONENT(SOURCE_PATH "${SOURCE}" PATH)
-	STRING(REPLACE "${CMAKE_SOURCE_DIR}" "" GROUP_PATH "${SOURCE_PATH}")
-	STRING(REPLACE "/" "\\" GROUP_PATH "${GROUP_PATH}")
-	SOURCE_GROUP("${GROUP_PATH}" FILES "${SOURCE}")
-ENDFOREACH()
+# TODO: Remove me once non-editor version of game will be done
+add_compile_definitions(COFFEE_EDITOR_ENABLED)
+
+IF(MSVC)
+    set_target_properties(imgui glm PROPERTIES
+        VS_GLOBAL_VcpkgEnabled FALSE
+        FOLDER "coffee-editor-libs"
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        VS_GLOBAL_VcpkgEnabled FALSE
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+    set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT "${PROJECT_NAME}")
+    
+    foreach(SOURCE IN ITEMS ${SOURCES})
+    	get_filename_component(SOURCE_PATH "${SOURCE}" PATH)
+    	string(REPLACE "${CMAKE_SOURCE_DIR}" "" GROUP_PATH "${SOURCE_PATH}")
+    	string(REPLACE "/" "\\" GROUP_PATH "${GROUP_PATH}")
+    	source_group("${GROUP_PATH}" FILES "${SOURCE}")
+    endforeach()
+endif()
