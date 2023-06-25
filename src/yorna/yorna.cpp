@@ -1,4 +1,4 @@
-#include <systems/sandbox/system.hpp>
+#include <yorna/yorna.hpp>
 
 #include <coffee/coffee.hpp>
 #include <coffee/objects/vertex.hpp>
@@ -6,7 +6,7 @@
 
 #include <imgui.h>
 
-namespace editor {
+namespace yorna {
 
     static constexpr std::array<VkClearValue, 2> normalClearValues = {
         VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
@@ -17,7 +17,7 @@ namespace editor {
         VkClearValue { .depthStencil = { 0.0f, 0U } }
     };
 
-    std::vector<glm::vec4> lightColors {
+    std::vector<glm::vec4> lightColors{
         {1.0f, 0.1f, 0.1f, 3.0f},
         {0.1f, 0.1f, 1.0f, 3.0f},
         {0.1f, 1.0f, 0.1f, 3.0f},
@@ -26,11 +26,11 @@ namespace editor {
         {1.0f, 1.0f, 1.0f, 3.0f}
     };
 
-    MainSystem::MainSystem(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler)
+    Yorna::Yorna(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler)
         : device { device }
         , loopHandler { loopHandler }
         , assetManager { coffee::AssetManager::create(device) }
-        , filesystem { coffee::Filesystem::create("sponza.fs") }
+        , filesystem { coffee::Filesystem::create("amazon.fs") }
         , sunlightShadow { device, assetManager, filesystem, 2048U }
     {
         createSamplers();
@@ -71,37 +71,28 @@ namespace editor {
         //});
     }
 
-    MainSystem::~MainSystem() {
-        vkDeviceWaitIdle(device->logicalDevice());
+    Yorna::~Yorna() {
+        device->waitForRelease();
     }
 
-    void MainSystem::bindWindow(const coffee::graphics::Window* window) noexcept {
+    void Yorna::bindWindow(const coffee::graphics::Window* window) noexcept {
         boundWindow = window;
 
-        boundWindow->mouseMoveEvent +=
-            coffee::Callback<const coffee::graphics::Window&, const coffee::MouseMoveEvent&> { this, &MainSystem::mousePositionCallback };
-        boundWindow->keyEvent +=
-            coffee::Callback<const coffee::graphics::Window&, const coffee::KeyEvent&> { this, &MainSystem::keyCallback };
-    }
-
-    void MainSystem::unbindWindow() noexcept {
         if (boundWindow != nullptr) {
-            boundWindow->mouseMoveEvent -=
-                coffee::Callback<const coffee::graphics::Window&, const coffee::MouseMoveEvent&> { this, &MainSystem::mousePositionCallback };
-            boundWindow->keyEvent -=
-                coffee::Callback<const coffee::graphics::Window&, const coffee::KeyEvent&> { this, &MainSystem::keyCallback };
-
-            boundWindow = nullptr;
+            boundWindow->mouseMoveEvent +=
+                coffee::Callback<const coffee::graphics::Window&, const coffee::MouseMoveEvent&> { this, &Yorna::mousePositionCallback };
+            boundWindow->keyEvent +=
+                coffee::Callback<const coffee::graphics::Window&, const coffee::KeyEvent&> { this, &Yorna::keyCallback };
         }
     }
 
-    void MainSystem::update() {
+    void Yorna::update() {
         cullMeshes();
         updateObjects();
         updateLightPoints();
     }
 
-    void MainSystem::cullMeshes()
+    void Yorna::cullMeshes()
     {
         auto& meshes = sponzaModel->model->meshes;
         auto& visibleMeshes = sponzaModel->visibleMeshes;
@@ -116,10 +107,10 @@ namespace editor {
         }
     }
 
-    void MainSystem::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer) {
+    void Yorna::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer) {
         const VkRect2D renderArea = {
             .extent = {
-                .width = depthImage->extent.width, 
+                .width = depthImage->extent.width,
                 .height = depthImage->extent.height
             }
         };
@@ -152,16 +143,17 @@ namespace editor {
         commandBuffer.endRenderPass();
     }
 
-    void MainSystem::performRendering(const coffee::graphics::CommandBuffer& commandBuffer) {
+    void Yorna::performRendering(const coffee::graphics::CommandBuffer& commandBuffer) {
         auto& meshes = sponzaModel->model->meshes;
         auto& visibleMeshes = sponzaModel->visibleMeshes;
+
         auto& frameInfo = frameInfos[frameInfoIndex];
-        const auto& currentLightBuffer = frameInfo.lightUbo;
+        auto& currentLightBuffer = frameInfo.lightUbo;
         auto sponzaMat4 = sponzaModel->transform.mat4();
 
         SunLightShadow::PushConstants shadowConstants {
             .lightSpaceMatrix = frameInfos[frameInfoIndex].lightUbo.sunlightSpaceMatrix,
-            .modelMatrix = sponzaModel->transform.mat4()
+            .modelMatrix = sponzaMat4
         };
 
         sunlightShadow.beginRender(commandBuffer);
@@ -233,11 +225,7 @@ namespace editor {
         frameInfoIndex = (frameInfoIndex + 1) % coffee::graphics::Device::kMaxOperationsInFlight;
     }
 
-    coffee::graphics::ImagePtr& MainSystem::image() {
-        return colorImage;
-    }
-
-    void MainSystem::updateCamera() {
+    void Yorna::updateCamera() {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
         camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
         camera.recalculateFrustumPlanes();
@@ -251,7 +239,7 @@ namespace editor {
         frameInfo.mvpBuffer->flush();
     }
 
-    void MainSystem::updateObjects() {
+    void Yorna::updateObjects() {
         if (boundWindow == nullptr) {
             updateCamera();
             return;
@@ -278,19 +266,19 @@ namespace editor {
         updateCamera();
     }
 
-    void MainSystem::updateLightPoints() {
-        auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, loopHandler.deltaTime(), { 0.0f, -1.0f, 0.0f });
+    void Yorna::updateLightPoints() {
+        auto rotateLight = glm::rotate(glm::mat4{ 1.0f }, loopHandler.deltaTime(), { 0.0f, -1.0f, 0.0f });
         auto& lightUbo = frameInfos[frameInfoIndex].lightUbo;
 
         lightUbo.sunlightSpaceMatrix = sunlightShadow.camera().projection() * sunlightShadow.camera().view();
-        lightUbo.sunlightDirection = glm::vec4 { sunlightShadow.lightObject().direction, 1.0f };
-        lightUbo.sunlightColor = glm::vec4 { sunlightShadow.lightObject().color, 1.0f };
+        lightUbo.sunlightDirection = glm::vec4{ sunlightShadow.lightObject().direction, 1.0f };
+        lightUbo.sunlightColor = glm::vec4{ sunlightShadow.lightObject().color, 1.0f };
 
         lightUbo.amountOfPointLights = static_cast<uint32_t>(pointLights.size());
         lightUbo.amountOfSpotLights = static_cast<uint32_t>(spotLights.size());
 
         for (size_t i = 0; i < pointLights.size(); i++) {
-            pointLights[i].position = glm::vec3(rotateLight * glm::vec4 { pointLights[i].position, 1.0f });
+            pointLights[i].position = glm::vec3(rotateLight * glm::vec4{ pointLights[i].position, 1.0f });
 
             lightUbo.pointLights[i].position = glm::vec4(pointLights[i].position, 0.1f);
             lightUbo.pointLights[i].color = glm::vec4(pointLights[i].color, pointLights[i].intensity);
@@ -306,7 +294,7 @@ namespace editor {
         frameInfos[frameInfoIndex].lightBuffer->flush();
     }
 
-    void MainSystem::createSamplers() {
+    void Yorna::createSamplers() {
         textureSampler = coffee::graphics::Sampler::create(device, {
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
@@ -332,7 +320,7 @@ namespace editor {
         });
     }
 
-    void MainSystem::createBuffers() {
+    void Yorna::createBuffers() {
         for (auto& frameInfo : frameInfos) {
             frameInfo.mvpBuffer = coffee::graphics::Buffer::create(device, {
                 .instanceSize = sizeof(MVPUniformBuffer),
@@ -352,14 +340,14 @@ namespace editor {
         }
     }
 
-    void MainSystem::loadModels() {
-        sponzaModel = std::make_unique<Model>(device, assetManager->getModel(filesystem, "sponza_scene.cfa"), textureSampler);
+    void Yorna::loadModels() {
+        sponzaModel = std::make_unique<Model>(device, assetManager->getModel(filesystem, "exterior.cfa"), textureSampler);
 
         viewerObject.translation.z = -1.5f;
         viewerObject.translation.y = 1.0f;
     }
 
-    void MainSystem::createRenderPasses() {
+    void Yorna::createRenderPasses() {
         earlyDepthPass = coffee::graphics::RenderPass::create(device, {
             .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
                 .format = device->optimalDepthFormat(),
@@ -394,7 +382,7 @@ namespace editor {
         });
     }
 
-    void MainSystem::createPipelines() {
+    void Yorna::createPipelines() {
         earlyDepthPipeline = coffee::graphics::Pipeline::create(device, earlyDepthPass, {
             .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
                 assetManager->getShader(filesystem, "shaders/early_depth.vert.spv", VK_SHADER_STAGE_VERTEX_BIT)
@@ -408,8 +396,8 @@ namespace editor {
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = coffee::Vertex::getElementDescriptions()
             }},
-            .constantRanges = { coffee::graphics::PushConstantRange { 
-                .stages = VK_SHADER_STAGE_VERTEX_BIT, 
+            .constantRanges = { coffee::graphics::PushConstantRange {
+                .stages = VK_SHADER_STAGE_VERTEX_BIT,
                 .size = static_cast<uint32_t>(sizeof(glm::mat4))
             }},
             .rasterizationInfo = {
@@ -468,7 +456,7 @@ namespace editor {
         });
     }
 
-    void MainSystem::createImages() {
+    void Yorna::createImages() {
         colorImage = coffee::graphics::Image::create(device, {
             .imageType = VK_IMAGE_TYPE_2D,
             .format = device->surfaceFormat(),
@@ -503,7 +491,7 @@ namespace editor {
         });
     }
 
-    void MainSystem::createFramebuffer() {
+    void Yorna::createFramebuffer() {
         earlyDepthFramebuffer = coffee::graphics::Framebuffer::create(device, earlyDepthPass, {
             .extent = { depthImage->extent.width, depthImage->extent.height },
             .depthStencilView = depthImageView
@@ -516,16 +504,16 @@ namespace editor {
         });
     }
 
-    void MainSystem::updateDescriptors() {
+    void Yorna::updateDescriptors() {
         outputSet->updateDescriptor(
             coffee::graphics::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
     }
 
-    void MainSystem::createDescriptors() {
+    void Yorna::createDescriptors() {
         gameLayout = coffee::graphics::DescriptorLayout::create(device, {
-            { 0, { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 1, { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 2, { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
+            { 0, {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
+            { 1, {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } },
+            { 2, {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
         });
 
         outputLayout = coffee::graphics::DescriptorLayout::create(device, {
@@ -545,7 +533,7 @@ namespace editor {
             coffee::graphics::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
     }
 
-    void MainSystem::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept {
+    void Yorna::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept {
         if (window.cursorState() != coffee::graphics::CursorState::Disabled) {
             return;
         }
@@ -557,7 +545,7 @@ namespace editor {
             glm::mod(viewerObject.rotation.y + lookSpeed * (e.x - mousePosition.x), glm::two_pi<float>());
     }
 
-    void MainSystem::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept {
+    void Yorna::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept {
         switch (e.key) {
             case coffee::Keys::Escape:
                 window.showCursor();

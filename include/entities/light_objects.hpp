@@ -1,9 +1,9 @@
-#ifndef ENTITIES_LIGHT_OBJECTS
-#define ENTITIES_LIGHT_OBJECTS
+#ifndef YORNA_ENTITIES_LIGHT_OBJECTS
+#define YORNA_ENTITIES_LIGHT_OBJECTS
 
 #include <entities/transform_component.hpp>
 
-namespace editor {
+namespace yorna {
 
     struct PointLight {
         PointLight(float intensity = 3.0f, glm::vec3 color = glm::vec3 { 1.0f }) noexcept;

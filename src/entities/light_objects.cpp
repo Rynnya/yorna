@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace editor {
+namespace yorna {
 
     PointLight::PointLight(float intensity, glm::vec3 color) noexcept
         : intensity { intensity }

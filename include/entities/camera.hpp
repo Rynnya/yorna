@@ -1,11 +1,11 @@
-#ifndef ENTITIES_CAMERA
-#define ENTITIES_CAMERA
+#ifndef YORNA_ENTITIES_CAMERA
+#define YORNA_ENTITIES_CAMERA
 
 #include <coffee/objects/aabb.hpp>
 
 #include <glm/glm.hpp>
 
-namespace editor {
+namespace yorna {
 
     class Camera {
     public:

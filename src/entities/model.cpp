@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace editor {
+namespace yorna {
 
     Model::Model(const coffee::graphics::DevicePtr& device, const coffee::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler)
         : device { device }

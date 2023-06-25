@@ -6,7 +6,7 @@
 #include <entities/camera.hpp>
 #include <entities/light_objects.hpp>
 
-namespace editor {
+namespace yorna {
 
     class SunLightShadow {
     public:

@@ -1,9 +1,9 @@
-#ifndef SYSTEMS_IMGUI_ENTITIES
-#define SYSTEMS_IMGUI_ENTITIES
+#ifndef YORNA_EDITOR_ENTITIES
+#define YORNA_EDITOR_ENTITIES
 
 #include <entt.hpp>
 
-namespace editor {
+namespace yorna {
 
     // Dummy structure to indicate that this entity is in root
     struct EntityRoot {};

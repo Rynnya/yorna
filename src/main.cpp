@@ -1,70 +1,75 @@
-#include <systems/imgui/system.hpp>
-#include <systems/sandbox/system.hpp>
+#include <editor/editor.hpp>
+#include <editor/imgui.hpp>
+#include <editor/timestamps.hpp>
 
-#include <coffee/audio/device.hpp>
-#include <coffee/audio/source.hpp>
+#include <yorna/yorna.hpp>
 
-#if defined(COFFEE_EDITOR_ENABLED)
-
-int main() {
-    auto gpuDevice = coffee::graphics::Device::create();
-    auto loopHandler = coffee::LoopHandler::create();
-
-    loopHandler.setFramerateLimit(1440.0f);
-
-    editor::ImGuiSystem imguiSystem { gpuDevice, loopHandler };
-    imguiSystem.run();
-
-    return 0;
-}
-
-#else
+#include <oneapi/tbb/task_group.h>
 
 int main() {
     auto gpuDevice = coffee::graphics::Device::create();
     auto loopHandler = coffee::LoopHandler::create();
 
-    auto applicationWindow = coffee::graphics::Window::create(gpuDevice, {
-        .extent = { 1280U, 720U },
-        .presentMode = VK_PRESENT_MODE_FIFO_KHR,
-        .hiddenOnStart = true
+    auto window = coffee::graphics::Window::create(gpuDevice, {
+        .extent = { 1280, 720 },
+        .presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR,
+        .hiddenOnStart = true,
+        .fullscreen = false
     });
 
-    editor::MainSystem sandboxSystem { gpuDevice, loopHandler };
+    yorna::Yorna gameHandler { gpuDevice, loopHandler };
+    yorna::Editor editor { gpuDevice, gameHandler };
+    yorna::ImGuiImplementation imguiHandler { gpuDevice, window };
+    yorna::QueryTimestamps timestamps { gpuDevice, 2 };
 
-    loopHandler.setFramerateLimit(60.0f);
-    sandboxSystem.bindWindow(applicationWindow.get());
-    applicationWindow->showWindow();
+    auto gameThreadWork = [&gpuDevice, &gameHandler, &timestamps]() {
+        yorna::ImGuiBackendPlatformData* platformData = static_cast<yorna::ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+        coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
+ 
+        timestamps.resetQueryPool(commandBuffer);
+        gameHandler.bindWindow(platformData->fullControlWindowPtr);
+        gameHandler.update();
 
-    while (!applicationWindow->shouldClose()) {
+        timestamps.writeBeginTimestamp(commandBuffer, 0);
+        gameHandler.performDepthTest(commandBuffer);
+        timestamps.writeEndTimestamp(commandBuffer, 0);
+
+        timestamps.writeBeginTimestamp(commandBuffer, 1);
+        gameHandler.performRendering(commandBuffer);
+        timestamps.writeEndTimestamp(commandBuffer, 1);
+
+        gpuDevice->sendCommandBuffer(std::move(commandBuffer));
+    };
+
+    tbb::task_group gameLoopTask {};
+
+    loopHandler.setFramerateLimit(1440.0f);
+    window->showWindow();
+
+    while (!window->shouldClose()) {
         loopHandler.pollEvents();
 
-        while (applicationWindow->isIconified()) {
+        while (!imguiHandler.isAnyWindowActive()) {
             loopHandler.pollEvents(1.0 / 60.0);
         }
 
-        if (applicationWindow->acquireNextImage()) {
-            auto commandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
+        auto loopBeginTime = std::chrono::high_resolution_clock::now();
+        float deltaTime = loopHandler.deltaTime();
 
-            sandboxSystem.update();
-            sandboxSystem.performDepthTest(commandBuffer);
-            sandboxSystem.performRendering(commandBuffer);
+        imguiHandler.update(deltaTime);
+        gameLoopTask.run(gameThreadWork);
+        editor.render();
+        imguiHandler.render();
 
-            // TODO: Currently MainSystem doesn't render to swap chain images
-            // I have 2 options how to deal with such issue:
-            // 1 - Create dummy swap chain that will only do gamma correction
-            // 2 - Do everything in MainSystem
-            // After some thinking I will implement one of them
+        auto imGuiTime = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - loopBeginTime).count();
 
-            applicationWindow->sendCommandBuffer(std::move(commandBuffer));
-            gpuDevice->submitPendingWork();
-        }
+        gameLoopTask.wait();
+        gpuDevice->submitPendingWork();
+
+        editor.updateAverageTimings(deltaTime, imGuiTime, timestamps);
 
         loopHandler.waitFramelimit();
     }
 
-    sandboxSystem.unbindWindow();
-
     return 0;
 }
-#endif

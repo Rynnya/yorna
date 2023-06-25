@@ -1,11 +1,11 @@
-#ifndef SYSTEMS_IMGUI_LOCALIZATION
-#define SYSTEMS_IMGUI_LOCALIZATION
+#ifndef YORNA_EDITOR_LOCALIZATION
+#define YORNA_EDITOR_LOCALIZATION
 
 #include <array>
 
 #include <imgui_file_dialog_def.h>
 
-namespace editor {
+namespace yorna {
 
     namespace detail {
         constexpr size_t localeSize = 24;

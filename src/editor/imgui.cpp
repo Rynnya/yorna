@@ -1,7 +1,15 @@
-#ifndef SYSTEMS_IMGUI_FIRA_CODE
-#define SYSTEMS_IMGUI_FIRA_CODE
+#include <editor/imgui.hpp>
 
-namespace editor {
+#include <coffee/graphics/monitor.hpp>
+#include <coffee/graphics/single_time.hpp>
+#include <coffee/utils/utils.hpp>
+
+#include <imgui_internal.h>
+
+namespace yorna {
+
+    constexpr std::array<VkClearValue, 1> clearValues = { VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } } };
+    constexpr VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 
     static const char FiraFontInBase85[236351] =
         "7])#######@&LF?'/###I),##c'ChLQXH##$%1S:t@rT.>XQDE)fj/1QY;99(]t:,d->>#QuhP/TTdL<wJD4JG>DW-F.$##.`,e=OJc9DZ]+##d**##DFwe=-)H$0?w'##Px$F7'vA0F"
@@ -1694,7 +1702,1298 @@ namespace editor {
         "f$B.&*ej)#aRXgLlKn68Uv3gN?v(.257>##=cDg.VndC?J7VI?=XX2Cpx,0Mk(4h%3eRq.1S.g+<Tbt(:bc/Li+kS7=J+PM]_i=-]JVS%?Via<RX+#5rUtA+fWoN0c3X(NmpL(]sf?W]"
         "=v]##VF%##$,>>######uCTM<FX%##";
 
-}
+    /*
+    #version 450 core
 
+    layout (location = 0) in vec2 aPos;
+    layout (location = 1) in vec2 aUV;
+    layout (location = 2) in vec4 aColor;
+    layout (push_constant) uniform uPushConstant { vec2 uScale; vec2 uTranslate; } pc;
 
-#endif
+    out gl_PerVertex { vec4 gl_Position; };
+    layout (location = 0) out struct { vec4 Color; vec2 UV; } Out;
+
+    void main()
+    {
+        Out.Color = aColor;
+        Out.UV = aUV;
+        gl_Position = vec4(aPos * pc.uScale + pc.uTranslate, 0, 1);
+    }
+*/
+
+    static std::vector<uint8_t> imguiVertexShader = {
+        0x03, 0x02, 0x23, 0x07, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x08, 0x00, 0x2e, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x06, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x47, 0x4c, 0x53, 0x4c, 0x2e, 0x73, 0x74, 0x64, 0x2e, 0x34, 0x35, 0x30,
+        0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x0f, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61, 0x69, 0x6e,
+        0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00,
+        0x1b, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0xc2, 0x01, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61, 0x69, 0x6e,
+        0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x03, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x06, 0x00, 0x05, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x43, 0x6f, 0x6c, 0x6f,
+        0x72, 0x00, 0x00, 0x00, 0x06, 0x00, 0x04, 0x00, 0x09, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x55, 0x56, 0x00, 0x00, 0x05, 0x00, 0x03, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x4f, 0x75, 0x74, 0x00,
+        0x05, 0x00, 0x04, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x61, 0x43, 0x6f, 0x6c, 0x6f, 0x72, 0x00, 0x00,
+        0x05, 0x00, 0x03, 0x00, 0x15, 0x00, 0x00, 0x00, 0x61, 0x55, 0x56, 0x00, 0x05, 0x00, 0x06, 0x00,
+        0x19, 0x00, 0x00, 0x00, 0x67, 0x6c, 0x5f, 0x50, 0x65, 0x72, 0x56, 0x65, 0x72, 0x74, 0x65, 0x78,
+        0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x06, 0x00, 0x19, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x67, 0x6c, 0x5f, 0x50, 0x6f, 0x73, 0x69, 0x74, 0x69, 0x6f, 0x6e, 0x00, 0x05, 0x00, 0x03, 0x00,
+        0x1b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x1c, 0x00, 0x00, 0x00,
+        0x61, 0x50, 0x6f, 0x73, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x06, 0x00, 0x1e, 0x00, 0x00, 0x00,
+        0x75, 0x50, 0x75, 0x73, 0x68, 0x43, 0x6f, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x74, 0x00, 0x00, 0x00,
+        0x06, 0x00, 0x05, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x75, 0x53, 0x63, 0x61,
+        0x6c, 0x65, 0x00, 0x00, 0x06, 0x00, 0x06, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x75, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x6c, 0x61, 0x74, 0x65, 0x00, 0x00, 0x05, 0x00, 0x03, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x70, 0x63, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x0b, 0x00, 0x00, 0x00,
+        0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x0f, 0x00, 0x00, 0x00,
+        0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x15, 0x00, 0x00, 0x00,
+        0x1e, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x48, 0x00, 0x05, 0x00, 0x19, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x03, 0x00,
+        0x19, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x1c, 0x00, 0x00, 0x00,
+        0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x00, 0x05, 0x00, 0x1e, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x00, 0x05, 0x00,
+        0x1e, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+        0x47, 0x00, 0x03, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x13, 0x00, 0x02, 0x00,
+        0x02, 0x00, 0x00, 0x00, 0x21, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x16, 0x00, 0x03, 0x00, 0x06, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0x00,
+        0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0x00,
+        0x08, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x04, 0x00,
+        0x09, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00,
+        0x0a, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00,
+        0x0a, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x15, 0x00, 0x04, 0x00,
+        0x0c, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00,
+        0x0c, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00,
+        0x0e, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00,
+        0x0e, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00,
+        0x11, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00,
+        0x0c, 0x00, 0x00, 0x00, 0x13, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00,
+        0x14, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00,
+        0x14, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00,
+        0x17, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x03, 0x00,
+        0x19, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x1a, 0x00, 0x00, 0x00,
+        0x03, 0x00, 0x00, 0x00, 0x19, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x1a, 0x00, 0x00, 0x00,
+        0x1b, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00,
+        0x1c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x04, 0x00, 0x1e, 0x00, 0x00, 0x00,
+        0x08, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x1f, 0x00, 0x00, 0x00,
+        0x09, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x1f, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x21, 0x00, 0x00, 0x00,
+        0x09, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3f, 0x36, 0x00, 0x05, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x02, 0x00,
+        0x05, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x07, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00,
+        0x0f, 0x00, 0x00, 0x00, 0x41, 0x00, 0x05, 0x00, 0x11, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,
+        0x0b, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x03, 0x00, 0x12, 0x00, 0x00, 0x00,
+        0x10, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00,
+        0x15, 0x00, 0x00, 0x00, 0x41, 0x00, 0x05, 0x00, 0x17, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00,
+        0x0b, 0x00, 0x00, 0x00, 0x13, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x03, 0x00, 0x18, 0x00, 0x00, 0x00,
+        0x16, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x00, 0x00,
+        0x1c, 0x00, 0x00, 0x00, 0x41, 0x00, 0x05, 0x00, 0x21, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00,
+        0x23, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00, 0x85, 0x00, 0x05, 0x00, 0x08, 0x00, 0x00, 0x00,
+        0x24, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x41, 0x00, 0x05, 0x00,
+        0x21, 0x00, 0x00, 0x00, 0x25, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00, 0x13, 0x00, 0x00, 0x00,
+        0x3d, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x25, 0x00, 0x00, 0x00,
+        0x81, 0x00, 0x05, 0x00, 0x08, 0x00, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00,
+        0x26, 0x00, 0x00, 0x00, 0x51, 0x00, 0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00,
+        0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x51, 0x00, 0x05, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x2b, 0x00, 0x00, 0x00, 0x27, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x00, 0x07, 0x00,
+        0x07, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x00, 0x00,
+        0x28, 0x00, 0x00, 0x00, 0x29, 0x00, 0x00, 0x00, 0x41, 0x00, 0x05, 0x00, 0x11, 0x00, 0x00, 0x00,
+        0x2d, 0x00, 0x00, 0x00, 0x1b, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x03, 0x00,
+        0x2d, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00
+    };
+
+    /*
+        #version 450 core
+
+        layout (location = 0) out vec4 fColor;
+        layout (set=0, binding=0) uniform sampler2D sTexture;
+        layout (location = 0) in struct { vec4 Color; vec2 UV; } In;
+
+        void main()
+        {
+            fColor = In.Color * texture(sTexture, In.UV.st);
+        }
+    */
+
+    static std::vector<uint8_t> imguiFragmentShader = {
+        0x03, 0x02, 0x23, 0x07, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x08, 0x00, 0x1e, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x11, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x06, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x47, 0x4c, 0x53, 0x4c, 0x2e, 0x73, 0x74, 0x64, 0x2e, 0x34, 0x35, 0x30,
+        0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x0f, 0x00, 0x07, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61, 0x69, 0x6e,
+        0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x10, 0x00, 0x03, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0xc2, 0x01, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x04, 0x00, 0x00, 0x00, 0x6d, 0x61, 0x69, 0x6e,
+        0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x04, 0x00, 0x09, 0x00, 0x00, 0x00, 0x66, 0x43, 0x6f, 0x6c,
+        0x6f, 0x72, 0x00, 0x00, 0x05, 0x00, 0x03, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x06, 0x00, 0x05, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x43, 0x6f, 0x6c, 0x6f,
+        0x72, 0x00, 0x00, 0x00, 0x06, 0x00, 0x04, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x55, 0x56, 0x00, 0x00, 0x05, 0x00, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x49, 0x6e, 0x00, 0x00,
+        0x05, 0x00, 0x05, 0x00, 0x16, 0x00, 0x00, 0x00, 0x73, 0x54, 0x65, 0x78, 0x74, 0x75, 0x72, 0x65,
+        0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x09, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x16, 0x00, 0x00, 0x00, 0x22, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x47, 0x00, 0x04, 0x00, 0x16, 0x00, 0x00, 0x00, 0x21, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x13, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x21, 0x00, 0x03, 0x00,
+        0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x16, 0x00, 0x03, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x20, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0x00, 0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+        0x07, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00,
+        0x03, 0x00, 0x00, 0x00, 0x17, 0x00, 0x04, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x02, 0x00, 0x00, 0x00, 0x1e, 0x00, 0x04, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
+        0x0a, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x0b, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x15, 0x00, 0x04, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x07, 0x00, 0x00, 0x00, 0x19, 0x00, 0x09, 0x00, 0x13, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1b, 0x00, 0x03, 0x00, 0x14, 0x00, 0x00, 0x00,
+        0x13, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x14, 0x00, 0x00, 0x00, 0x3b, 0x00, 0x04, 0x00, 0x15, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x04, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x19, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x0a, 0x00, 0x00, 0x00, 0x36, 0x00, 0x05, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x02, 0x00, 0x05, 0x00, 0x00, 0x00,
+        0x41, 0x00, 0x05, 0x00, 0x10, 0x00, 0x00, 0x00, 0x11, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00,
+        0x0f, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x07, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00,
+        0x11, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x14, 0x00, 0x00, 0x00, 0x17, 0x00, 0x00, 0x00,
+        0x16, 0x00, 0x00, 0x00, 0x41, 0x00, 0x05, 0x00, 0x19, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00,
+        0x0d, 0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x04, 0x00, 0x0a, 0x00, 0x00, 0x00,
+        0x1b, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x00, 0x05, 0x00, 0x07, 0x00, 0x00, 0x00,
+        0x1c, 0x00, 0x00, 0x00, 0x17, 0x00, 0x00, 0x00, 0x1b, 0x00, 0x00, 0x00, 0x85, 0x00, 0x05, 0x00,
+        0x07, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x00,
+        0x3e, 0x00, 0x03, 0x00, 0x09, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x00, 0x00, 0xfd, 0x00, 0x01, 0x00,
+        0x38, 0x00, 0x01, 0x00
+    };
+
+    ImGuiKey keyToImGui(coffee::Keys key)
+    {
+        switch (key) {
+        case coffee::Keys::Tab:
+            return ImGuiKey_Tab;
+        case coffee::Keys::Left:
+            return ImGuiKey_LeftArrow;
+        case coffee::Keys::Right:
+            return ImGuiKey_RightArrow;
+        case coffee::Keys::Up:
+            return ImGuiKey_UpArrow;
+        case coffee::Keys::Down:
+            return ImGuiKey_DownArrow;
+        case coffee::Keys::PageUp:
+            return ImGuiKey_PageUp;
+        case coffee::Keys::PageDown:
+            return ImGuiKey_PageDown;
+        case coffee::Keys::Home:
+            return ImGuiKey_Home;
+        case coffee::Keys::End:
+            return ImGuiKey_End;
+        case coffee::Keys::Insert:
+            return ImGuiKey_Insert;
+        case coffee::Keys::Delete:
+            return ImGuiKey_Delete;
+        case coffee::Keys::Backspace:
+            return ImGuiKey_Backspace;
+        case coffee::Keys::Space:
+            return ImGuiKey_Space;
+        case coffee::Keys::Enter:
+            return ImGuiKey_Enter;
+        case coffee::Keys::Escape:
+            return ImGuiKey_Escape;
+        case coffee::Keys::Apostrophe:
+            return ImGuiKey_Apostrophe;
+        case coffee::Keys::Comma:
+            return ImGuiKey_Comma;
+        case coffee::Keys::Minus:
+            return ImGuiKey_Minus;
+        case coffee::Keys::Period:
+            return ImGuiKey_Period;
+        case coffee::Keys::Slash:
+            return ImGuiKey_Slash;
+        case coffee::Keys::Semicolon:
+            return ImGuiKey_Semicolon;
+        case coffee::Keys::Equal:
+            return ImGuiKey_Equal;
+        case coffee::Keys::LeftBracket:
+            return ImGuiKey_LeftBracket;
+        case coffee::Keys::Backslash:
+            return ImGuiKey_Backslash;
+        case coffee::Keys::RightBracket:
+            return ImGuiKey_RightBracket;
+        case coffee::Keys::GraveAccent:
+            return ImGuiKey_GraveAccent;
+        case coffee::Keys::CapsLock:
+            return ImGuiKey_CapsLock;
+        case coffee::Keys::ScrollLock:
+            return ImGuiKey_ScrollLock;
+        case coffee::Keys::NumLock:
+            return ImGuiKey_NumLock;
+        case coffee::Keys::PrintScreen:
+            return ImGuiKey_PrintScreen;
+        case coffee::Keys::Pause:
+            return ImGuiKey_Pause;
+        case coffee::Keys::KP0:
+            return ImGuiKey_Keypad0;
+        case coffee::Keys::KP1:
+            return ImGuiKey_Keypad1;
+        case coffee::Keys::KP2:
+            return ImGuiKey_Keypad2;
+        case coffee::Keys::KP3:
+            return ImGuiKey_Keypad3;
+        case coffee::Keys::KP4:
+            return ImGuiKey_Keypad4;
+        case coffee::Keys::KP5:
+            return ImGuiKey_Keypad5;
+        case coffee::Keys::KP6:
+            return ImGuiKey_Keypad6;
+        case coffee::Keys::KP7:
+            return ImGuiKey_Keypad7;
+        case coffee::Keys::KP8:
+            return ImGuiKey_Keypad8;
+        case coffee::Keys::KP9:
+            return ImGuiKey_Keypad9;
+        case coffee::Keys::KPDecimal:
+            return ImGuiKey_KeypadDecimal;
+        case coffee::Keys::KPDivide:
+            return ImGuiKey_KeypadDivide;
+        case coffee::Keys::KPMultiply:
+            return ImGuiKey_KeypadMultiply;
+        case coffee::Keys::KPSubtract:
+            return ImGuiKey_KeypadSubtract;
+        case coffee::Keys::KPAdd:
+            return ImGuiKey_KeypadAdd;
+        case coffee::Keys::KPEnter:
+            return ImGuiKey_KeypadEnter;
+        case coffee::Keys::KPEqual:
+            return ImGuiKey_KeypadEqual;
+        case coffee::Keys::LeftShift:
+            return ImGuiKey_LeftShift;
+        case coffee::Keys::LeftControl:
+            return ImGuiKey_LeftCtrl;
+        case coffee::Keys::LeftAlt:
+            return ImGuiKey_LeftAlt;
+        case coffee::Keys::LeftSuper:
+            return ImGuiKey_LeftSuper;
+        case coffee::Keys::RightShift:
+            return ImGuiKey_RightShift;
+        case coffee::Keys::RightControl:
+            return ImGuiKey_RightCtrl;
+        case coffee::Keys::RightAlt:
+            return ImGuiKey_RightAlt;
+        case coffee::Keys::RightSuper:
+            return ImGuiKey_RightSuper;
+        case coffee::Keys::Menu:
+            return ImGuiKey_Menu;
+        case coffee::Keys::D0:
+            return ImGuiKey_0;
+        case coffee::Keys::D1:
+            return ImGuiKey_1;
+        case coffee::Keys::D2:
+            return ImGuiKey_2;
+        case coffee::Keys::D3:
+            return ImGuiKey_3;
+        case coffee::Keys::D4:
+            return ImGuiKey_4;
+        case coffee::Keys::D5:
+            return ImGuiKey_5;
+        case coffee::Keys::D6:
+            return ImGuiKey_6;
+        case coffee::Keys::D7:
+            return ImGuiKey_7;
+        case coffee::Keys::D8:
+            return ImGuiKey_8;
+        case coffee::Keys::D9:
+            return ImGuiKey_9;
+        case coffee::Keys::A:
+            return ImGuiKey_A;
+        case coffee::Keys::B:
+            return ImGuiKey_B;
+        case coffee::Keys::C:
+            return ImGuiKey_C;
+        case coffee::Keys::D:
+            return ImGuiKey_D;
+        case coffee::Keys::E:
+            return ImGuiKey_E;
+        case coffee::Keys::F:
+            return ImGuiKey_F;
+        case coffee::Keys::G:
+            return ImGuiKey_G;
+        case coffee::Keys::H:
+            return ImGuiKey_H;
+        case coffee::Keys::I:
+            return ImGuiKey_I;
+        case coffee::Keys::J:
+            return ImGuiKey_J;
+        case coffee::Keys::K:
+            return ImGuiKey_K;
+        case coffee::Keys::L:
+            return ImGuiKey_L;
+        case coffee::Keys::M:
+            return ImGuiKey_M;
+        case coffee::Keys::N:
+            return ImGuiKey_N;
+        case coffee::Keys::O:
+            return ImGuiKey_O;
+        case coffee::Keys::P:
+            return ImGuiKey_P;
+        case coffee::Keys::Q:
+            return ImGuiKey_Q;
+        case coffee::Keys::R:
+            return ImGuiKey_R;
+        case coffee::Keys::S:
+            return ImGuiKey_S;
+        case coffee::Keys::T:
+            return ImGuiKey_T;
+        case coffee::Keys::U:
+            return ImGuiKey_U;
+        case coffee::Keys::V:
+            return ImGuiKey_V;
+        case coffee::Keys::W:
+            return ImGuiKey_W;
+        case coffee::Keys::X:
+            return ImGuiKey_X;
+        case coffee::Keys::Y:
+            return ImGuiKey_Y;
+        case coffee::Keys::Z:
+            return ImGuiKey_Z;
+        case coffee::Keys::F1:
+            return ImGuiKey_F1;
+        case coffee::Keys::F2:
+            return ImGuiKey_F2;
+        case coffee::Keys::F3:
+            return ImGuiKey_F3;
+        case coffee::Keys::F4:
+            return ImGuiKey_F4;
+        case coffee::Keys::F5:
+            return ImGuiKey_F5;
+        case coffee::Keys::F6:
+            return ImGuiKey_F6;
+        case coffee::Keys::F7:
+            return ImGuiKey_F7;
+        case coffee::Keys::F8:
+            return ImGuiKey_F8;
+        case coffee::Keys::F9:
+            return ImGuiKey_F9;
+        case coffee::Keys::F10:
+            return ImGuiKey_F10;
+        case coffee::Keys::F11:
+            return ImGuiKey_F11;
+        case coffee::Keys::F12:
+            return ImGuiKey_F12;
+        default:
+            return ImGuiKey_None;
+        }
+    }
+
+    ImGuiImplementation::ImGuiImplementation(const coffee::graphics::DevicePtr& device, const coffee::graphics::WindowPtr& applicationWindow)
+        : device { device }
+        , applicationWindow { applicationWindow }
+    {
+        initializeImGui();
+        initializeBackend();
+    }
+
+    ImGuiImplementation::~ImGuiImplementation()
+    {
+        vkDeviceWaitIdle(device->logicalDevice());
+
+        ImGui::DestroyPlatformWindows();
+
+        delete static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+        delete static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+
+        ImGui::DestroyContext();
+    }
+
+    void ImGuiImplementation::update(float deltaTime)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+
+        VkExtent2D windowSize = applicationWindow->windowSize();
+        io.DisplaySize = ImVec2 { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
+
+        if (windowSize.width > 0 && windowSize.height > 0) {
+            VkExtent2D framebufferSize = applicationWindow->framebufferSize();
+
+            io.DisplayFramebufferScale = ImVec2 { static_cast<float>(windowSize.width / framebufferSize.width),
+                                                  static_cast<float>(windowSize.height / framebufferSize.height) };
+        }
+
+        io.DeltaTime = deltaTime;
+
+        if (static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->wantUpdateMonitors) {
+            updateMonitors();
+        }
+
+        updateMouse(applicationWindow);
+        updateCursor(applicationWindow);
+
+        acquired = applicationWindow->acquireNextImage();
+    }
+
+    void ImGuiImplementation::render()
+    {
+        ImGuiIO& io = ImGui::GetIO();
+
+        if (acquired) {
+            coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(device);
+            this->render(ImGui::GetMainViewport(), commandBuffer);
+            applicationWindow->sendCommandBuffer(std::move(commandBuffer));
+        }
+
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
+    }
+
+    bool ImGuiImplementation::isAnyWindowActive()
+    {
+        for (ImGuiViewportP* viewport : ImGui::GetCurrentContext()->Viewports) {
+            if (ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)) {
+                if (!viewportData->windowHandle->isIconified()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    void ImGuiImplementation::render(ImGuiViewport* viewport, const coffee::graphics::CommandBuffer& commandBuffer)
+    {
+        ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+        ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+        ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData);
+        ImDrawData* data = viewport->DrawData;
+
+        const uint32_t frameIndex = viewportData->windowHandle->currentImageIndex();
+        float framebufferWidth = data->DisplaySize.x * data->FramebufferScale.x;
+        float framebufferHeight = data->DisplaySize.y * data->FramebufferScale.y;
+
+        if (framebufferWidth <= 0.0f || framebufferHeight <= 0.0f) {
+            return;
+        }
+
+        commandBuffer.beginRenderPass(backendData->renderPass, rendererData->framebuffers[frameIndex], {
+            .offset = { 0, 0 },
+            .extent = viewportData->windowHandle->framebufferSize()
+            }, static_cast<uint32_t>(clearValues.size()), clearValues.data());
+
+        if (data->TotalVtxCount > 0) {
+            size_t vertexSize = data->TotalVtxCount * sizeof(ImDrawVert);
+            size_t indexSize = data->TotalIdxCount * sizeof(ImDrawIdx);
+
+            coffee::graphics::BufferPtr& vertexBuffer = rendererData->vertexBuffers[frameIndex];
+            coffee::graphics::BufferPtr& indexBuffer = rendererData->indexBuffers[frameIndex];
+
+            if (vertexBuffer == nullptr || (vertexBuffer->instanceSize * vertexBuffer->instanceCount) < vertexSize) {
+                if (vertexBuffer != nullptr) {
+                    vertexBuffer->unmap();
+                }
+
+                coffee::graphics::BufferConfiguration configuration{};
+                configuration.instanceSize = sizeof(ImDrawVert);
+                configuration.instanceCount = data->TotalVtxCount;
+                configuration.usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+                configuration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                configuration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+                vertexBuffer = coffee::graphics::Buffer::create(backendData->device, configuration);
+                vertexBuffer->map();
+            }
+
+            if (indexBuffer == nullptr || (indexBuffer->instanceSize * indexBuffer->instanceCount) < indexSize) {
+                if (indexBuffer != nullptr) {
+                    indexBuffer->unmap();
+                }
+
+                coffee::graphics::BufferConfiguration configuration{};
+                configuration.instanceSize = sizeof(ImDrawIdx);
+                configuration.instanceCount = data->TotalIdxCount;
+                configuration.usageFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+                configuration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                configuration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+                indexBuffer = coffee::graphics::Buffer::create(backendData->device, configuration);
+                indexBuffer->map();
+            }
+
+            size_t vertexOffset = 0;
+            size_t indexOffset = 0;
+
+            for (size_t i = 0; i < data->CmdListsCount; i++) {
+                const ImDrawList* list = data->CmdLists[i];
+
+                std::memcpy(static_cast<char*>(vertexBuffer->memory()) + vertexOffset,
+                    list->VtxBuffer.Data, list->VtxBuffer.Size * sizeof(ImDrawVert));
+                std::memcpy(static_cast<char*>(indexBuffer->memory()) + indexOffset,
+                    list->IdxBuffer.Data, list->IdxBuffer.Size * sizeof(ImDrawIdx));
+
+                vertexOffset += list->VtxBuffer.Size * sizeof(ImDrawVert);
+                indexOffset += list->IdxBuffer.Size * sizeof(ImDrawIdx);
+            }
+
+            VkDeviceSize offsets[] = { 0 };
+            commandBuffer.bindVertexBuffers(1, &vertexBuffer->buffer(), offsets);
+            commandBuffer.bindIndexBuffer(indexBuffer);
+        }
+
+        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline);
+        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, backendData->descriptorSet);
+        commandBuffer.setViewport({ .width = framebufferWidth, .height = framebufferHeight, .minDepth = 0.0f, .maxDepth = 1.0f });
+
+        ImGuiPushConstant constants{};
+        constants.scale.x = 2.0f / data->DisplaySize.x;
+        constants.scale.y = 2.0f / data->DisplaySize.y;
+        constants.translate.x = -1.0f - data->DisplayPos.x * constants.scale.x;
+        constants.translate.y = -1.0f - data->DisplayPos.y * constants.scale.y;
+        commandBuffer.pushConstants(backendData->pipeline, VK_SHADER_STAGE_VERTEX_BIT, sizeof(ImGuiPushConstant), &constants);
+
+        ImVec2 clipOff = data->DisplayPos;
+        ImVec2 clipScale = data->FramebufferScale;
+
+        uint32_t vertexOffset = 0;
+        uint32_t indexOffset = 0;
+
+        for (int i = 0; i < data->CmdListsCount; i++) {
+            const ImDrawList* list = data->CmdLists[i];
+
+            for (int j = 0; j < list->CmdBuffer.Size; j++) {
+                const ImDrawCmd& command = list->CmdBuffer[j];
+
+                if (command.UserCallback != nullptr) {
+                    command.UserCallback(list, &command);
+                    continue;
+                }
+
+                ImVec2 clipMin { (command.ClipRect.x - clipOff.x) * clipScale.x, (command.ClipRect.y - clipOff.y) * clipScale.y };
+                ImVec2 clipMax { (command.ClipRect.z - clipOff.x) * clipScale.x, (command.ClipRect.w - clipOff.y) * clipScale.y };
+
+                clipMin.x = std::max(clipMin.x, 0.0f);
+                clipMin.y = std::max(clipMin.y, 0.0f);
+
+                clipMax.x = std::min(clipMax.x, framebufferWidth);
+                clipMax.y = std::min(clipMax.y, framebufferHeight);
+
+                if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y) {
+                    continue;
+                }
+
+                if (command.TextureId != nullptr) {
+                    commandBuffer.bindDescriptorSets(
+                        VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        backendData->pipeline,
+                        *reinterpret_cast<const coffee::graphics::DescriptorSetPtr*>(command.TextureId));
+                }
+
+                commandBuffer.setScissor({
+                    .offset = {
+                        .x = static_cast<int32_t>(clipMin.x),
+                        .y = static_cast<int32_t>(clipMin.y)
+                    },
+                    .extent = {
+                        .width = static_cast<uint32_t>(clipMax.x - clipMin.x),
+                        .height = static_cast<uint32_t>(clipMax.y - clipMin.y)
+                    }
+                });
+                commandBuffer.drawIndexed(command.ElemCount, 1U, indexOffset + command.IdxOffset, vertexOffset + command.VtxOffset);
+
+                // We must restore default descriptor set
+                if (command.TextureId != nullptr) {
+                    commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, backendData->descriptorSet);
+                }
+            }
+
+            vertexOffset += list->VtxBuffer.Size;
+            indexOffset += list->IdxBuffer.Size;
+        }
+
+        commandBuffer.endRenderPass();
+    }
+
+    void ImGuiImplementation::initializeImGui()
+    {
+        ImGui::CreateContext();
+        ImGui::StyleColorsDark();
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
+        io.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
+        io.BackendFlags |= ImGuiBackendFlags_HasMouseHoveredViewport;
+
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.WindowRounding = 0.0f;
+
+        VkExtent2D windowSize = applicationWindow->windowSize();
+        io.DisplaySize = ImVec2 { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
+
+        ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(io.BackendPlatformUserData = new ImGuiBackendPlatformData {});
+
+        backendData->cursors[ImGuiMouseCursor_Arrow] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::Arrow);
+        backendData->cursors[ImGuiMouseCursor_TextInput] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::TextInput);
+        backendData->cursors[ImGuiMouseCursor_Hand] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::Hand);
+        backendData->cursors[ImGuiMouseCursor_ResizeEW] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeEW);
+        backendData->cursors[ImGuiMouseCursor_ResizeNS] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeNS);
+        backendData->cursors[ImGuiMouseCursor_ResizeNWSE] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeNWSE);
+        backendData->cursors[ImGuiMouseCursor_ResizeNESW] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeNESW);
+        backendData->cursors[ImGuiMouseCursor_ResizeAll] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::ResizeAll);
+        backendData->cursors[ImGuiMouseCursor_NotAllowed] = coffee::graphics::Cursor::create(coffee::graphics::CursorType::NotAllowed);
+
+        ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
+        updateMonitors();
+
+        coffee::graphics::Monitor::monitorConnectedEvent += [](const coffee::graphics::MonitorPtr&) {
+            static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->wantUpdateMonitors = true;
+        };
+
+        coffee::graphics::Monitor::monitorDisconnectedEvent += [](const coffee::graphics::MonitorPtr&) {
+            static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData)->wantUpdateMonitors = true;
+        };
+
+        // Platform callbacks
+        platformIO.Platform_CreateWindow = [](ImGuiViewport* viewport) {
+            ImGuiBackendPlatformData* backendPlatformData = static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+            ImGuiBackendRendererData* backendRendererData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+
+            ImGuiViewportData* viewportData = new ImGuiViewportData{
+                .windowHandle = coffee::graphics::Window::create(backendRendererData->device, {
+                    .extent = {.width = static_cast<uint32_t>(viewport->Size.x), .height = static_cast<uint32_t>(viewport->Size.y) },
+                    .presentMode = presentMode,
+                    .hiddenOnStart = true
+                    // BUG: No borderless here because if window is collapsed it will crash engine with 0 height size
+                }).release()  // We must explicitly delete this
+            };
+
+            viewport->PlatformUserData = viewportData;
+
+            coffee::graphics::Window* window = viewportData->windowHandle;
+
+            window->userData = viewport->ID;
+            window->setWindowPosition({ static_cast<int32_t>(viewport->Pos.x), static_cast<int32_t>(viewport->Pos.y) });
+
+            window->windowFocusEvent += focusCallback;
+            window->windowEnterEvent += enterCallback;
+            window->mouseClickEvent += mouseClickCallback;
+            window->mouseMoveEvent += mousePositionCallback;
+            window->mouseWheelEvent += mouseWheelCallback;
+            window->keyEvent += keyCallback;
+            window->charEvent += charCallback;
+
+            window->windowPositionEvent += [](const coffee::graphics::Window& window, const coffee::WindowPositionEvent& e) {
+                if (ImGuiViewport* viewport = ImGui::FindViewportByID(std::any_cast<ImGuiID>(window.userData))) {
+                    if (ImGui::GetFrameCount() <= static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->ignoreWindowPositionFrameCount + 1) {
+                        return;
+                    }
+
+                    viewport->PlatformRequestMove = true;
+                }
+            };
+
+            window->windowResizeEvent += [](const coffee::graphics::Window& window, const coffee::ResizeEvent& e) {
+                if (ImGuiViewport* viewport = ImGui::FindViewportByID(std::any_cast<ImGuiID>(window.userData))) {
+                    ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+                    ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+                    ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData);
+
+                    const auto& presentImages = viewportData->windowHandle->presentImages();
+                    rendererData->swapChainViews.resize(presentImages.size());
+                    rendererData->framebuffers.resize(presentImages.size());
+
+                    for (size_t i = 0; i < presentImages.size(); i++) {
+                        rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
+                            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                            .format = backendData->device->surfaceFormat()
+                            });
+
+                        rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
+                            .extent = viewportData->windowHandle->framebufferSize(),
+                            .colorViews = { rendererData->swapChainViews[i] }
+                            });
+                    }
+
+                    if (ImGui::GetFrameCount() <= static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->ignoreWindowSizeFrameCount + 1) {
+                        return;
+                    }
+
+                    viewport->PlatformRequestResize = true;
+                }
+            };
+
+            window->windowCloseEvent += [](const coffee::graphics::Window& window) {
+                if (ImGuiViewport* viewport = ImGui::FindViewportByID(std::any_cast<ImGuiID>(window.userData))) {
+                    viewport->PlatformRequestClose = true;
+                }
+            };
+
+            if ((viewport->Flags & ImGuiViewportFlags_NoDecoration) != 0) {
+                window->makeBorderless();
+            }
+
+            window->showWindow();
+        };
+
+        platformIO.Platform_DestroyWindow = [](ImGuiViewport* viewport) {
+            if (ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)) {
+                ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+                ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData);
+
+                for (int32_t i = 0; i < IM_ARRAYSIZE(backendData->keyOwnerWindows); i++) {
+                    if (backendData->keyOwnerWindows[i] == viewportData->windowHandle) {
+                        keyCallback(*viewportData->windowHandle, { coffee::State::Release, static_cast<coffee::Keys>(i), 0, 0 });
+                    }
+                }
+
+                for (const auto& buffer : rendererData->vertexBuffers) {
+                    if (buffer != nullptr) {
+                        buffer->unmap();
+                    }
+                }
+
+                for (const auto& buffer : rendererData->indexBuffers) {
+                    if (buffer != nullptr) {
+                        buffer->unmap();
+                    }
+                }
+
+                // If user destroys window while cursor is captured
+                if (viewportData->windowHandle == backendData->fullControlWindowPtr) {
+                    backendData->fullControlWindowPtr = nullptr;
+                }
+
+                // We released this handle before, so we must explicitly delete it
+                if (viewport != ImGui::GetMainViewport()) {
+                    delete viewportData->windowHandle;
+                }
+
+                delete viewportData;
+                viewport->PlatformUserData = nullptr;
+
+                delete rendererData;
+                viewport->RendererUserData = nullptr;
+            }
+        };
+
+        platformIO.Platform_ShowWindow = [](ImGuiViewport* viewport) {
+            static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->showWindow();
+        };
+
+        platformIO.Platform_SetWindowPos = [](ImGuiViewport* viewport, ImVec2 position) {
+            ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+            viewportData->ignoreWindowPositionFrameCount = ImGui::GetFrameCount();
+            viewportData->windowHandle->setWindowPosition({ static_cast<int32_t>(position.x), static_cast<int32_t>(position.y) });
+        };
+
+        platformIO.Platform_GetWindowPos = [](ImGuiViewport* viewport) -> ImVec2 {
+            coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
+            VkOffset2D windowPosition = window->windowPosition();
+            return { static_cast<float>(windowPosition.x), static_cast<float>(windowPosition.y) };
+        };
+
+        platformIO.Platform_SetWindowSize = [](ImGuiViewport* viewport, ImVec2 size) {
+            ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+            viewportData->ignoreWindowSizeFrameCount = ImGui::GetFrameCount();
+            viewportData->windowHandle->setWindowSize({ static_cast<uint32_t>(size.x), static_cast<uint32_t>(size.y) });
+        };
+
+        platformIO.Platform_GetWindowSize = [](ImGuiViewport* viewport) -> ImVec2 {
+            coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
+            VkExtent2D windowSize = window->windowSize();
+            return { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
+        };
+
+        platformIO.Platform_SetWindowFocus = [](ImGuiViewport* viewport) {
+            static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->focusWindow();
+        };
+
+        platformIO.Platform_GetWindowFocus = [](ImGuiViewport* viewport) -> bool {
+            return static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->isFocused();
+        };
+
+        platformIO.Platform_GetWindowMinimized = [](ImGuiViewport* viewport) -> bool {
+            bool result = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->isIconified();
+            return result;
+        };
+
+        platformIO.Platform_SetWindowTitle = [](ImGuiViewport* viewport, const char* str) {
+            static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->setWindowTitle(str);
+        };
+
+        platformIO.Platform_RenderWindow = [](ImGuiViewport*, void*) { /* Already handled by Renderer_RenderWindow */ };
+        platformIO.Platform_SwapBuffers = [](ImGuiViewport*, void*) { /* Already handled by Renderer_SwapBuffers */ };
+
+        // Renderer callbacks
+        platformIO.Renderer_CreateWindow = [](ImGuiViewport* viewport) {
+            ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+            ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData = new ImGuiRendererData {});
+
+            coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
+            const auto& presentImages = window->presentImages();
+            rendererData->swapChainViews.resize(presentImages.size());
+            rendererData->framebuffers.resize(presentImages.size());
+
+            for (size_t i = 0; i < presentImages.size(); i++) {
+                rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = backendData->device->surfaceFormat()
+                    });
+
+                rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
+                    .extent = window->framebufferSize(),
+                    .colorViews = { rendererData->swapChainViews[i] }
+                    });
+            }
+
+            rendererData->vertexBuffers.resize(presentImages.size());
+            rendererData->indexBuffers.resize(presentImages.size());
+        };
+
+        platformIO.Renderer_DestroyWindow = [](ImGuiViewport*) {
+            // Already handled by Platform_DestroyWindow
+            // Must be here as placeholder, otherwise viewports won't be able to merge
+        };
+
+        platformIO.Renderer_RenderWindow = [](ImGuiViewport* viewport, void*) {
+            ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+            ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+
+            if (viewportData->windowHandle->acquireNextImage()) {
+                coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(backendData->device);
+                ImGuiImplementation::render(viewport, commandBuffer);
+                viewportData->windowHandle->sendCommandBuffer(std::move(commandBuffer));
+            }
+        };
+
+        applicationWindow->windowFocusEvent += focusCallback;
+        applicationWindow->windowEnterEvent += enterCallback;
+        applicationWindow->mouseClickEvent += mouseClickCallback;
+        applicationWindow->mouseMoveEvent += mousePositionCallback;
+        applicationWindow->mouseWheelEvent += mouseWheelCallback;
+        applicationWindow->keyEvent += keyCallback;
+        applicationWindow->charEvent += charCallback;
+
+        applicationWindow->windowResizeEvent += [](const coffee::graphics::Window& window, const coffee::ResizeEvent& e) {
+            ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+            ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(ImGui::GetMainViewport()->PlatformUserData);
+            ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(ImGui::GetMainViewport()->RendererUserData);
+
+            const auto& presentImages = viewportData->windowHandle->presentImages();
+            rendererData->swapChainViews.resize(presentImages.size());
+            rendererData->framebuffers.resize(presentImages.size());
+
+            for (size_t i = 0; i < presentImages.size(); i++) {
+                rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = backendData->device->surfaceFormat()
+                });
+
+                rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
+                    .extent = viewportData->windowHandle->framebufferSize(),
+                    .colorViews = { rendererData->swapChainViews[i] }
+                });
+            }
+        };
+
+        applicationWindow->userData = 0;
+
+        ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+        mainViewport->PlatformUserData = new ImGuiViewportData{ .windowHandle = applicationWindow.get() };
+    }
+
+    void ImGuiImplementation::initializeBackend()
+    {
+        ImGuiBackendRendererData* backendData =
+            static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData = new ImGuiBackendRendererData {});
+        ImGuiRendererData* rendererData =
+            static_cast<ImGuiRendererData*>(ImGui::GetMainViewport()->RendererUserData = new ImGuiRendererData {});
+
+        backendData->device = device;
+
+        createFonts();
+        createDescriptors();
+        createRenderPass();
+        createPipeline();
+
+        const auto& presentImages = applicationWindow->presentImages();
+        rendererData->swapChainViews.resize(presentImages.size());
+        rendererData->framebuffers.resize(presentImages.size());
+
+        for (size_t i = 0; i < presentImages.size(); i++) {
+            rendererData->swapChainViews[i] = coffee::graphics::ImageView::create(presentImages[i], {
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = backendData->device->surfaceFormat()
+            });
+
+            rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
+                .extent = applicationWindow->framebufferSize(),
+                .colorViews = { rendererData->swapChainViews[i] }
+            });
+        }
+
+        rendererData->vertexBuffers.resize(presentImages.size());
+        rendererData->indexBuffers.resize(presentImages.size());
+    }
+
+    void ImGuiImplementation::createFonts()
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        uint8_t* fontPixels = nullptr;
+        int width{}, height{};
+
+        ImFontConfig fontConfiguration{};
+        fontConfiguration.SizePixels = 16.0f;
+        fontConfiguration.OversampleH = 1;
+        fontConfiguration.OversampleV = 1;
+        fontConfiguration.PixelSnapH = true;
+        fontConfiguration.GlyphOffset.y = std::floor(fontConfiguration.SizePixels / 13.0f);
+
+        io.Fonts->AddFontFromMemoryCompressedBase85TTF(
+            FiraFontInBase85,
+            fontConfiguration.SizePixels,
+            &fontConfiguration,
+            io.Fonts->GetGlyphRangesCyrillic()
+        );
+
+        io.Fonts->Build();
+        io.Fonts->GetTexDataAsAlpha8(&fontPixels, &width, &height);
+
+        ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(io.BackendRendererUserData);
+
+        backendData->fontsSampler = coffee::graphics::Sampler::create(backendData->device, {
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .anisotropyEnable = true,
+            .maxAnisotropy = 1U,
+            .minLod = -1000.0f,
+            .maxLod = 1000.0f,
+            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK
+            });
+
+        backendData->fonts = coffee::graphics::Image::create(backendData->device, {
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R8_UNORM,
+            .extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) },
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .priority = 1.0f
+            });
+
+        coffee::graphics::BufferPtr stagingBuffer = coffee::graphics::Buffer::create(backendData->device, {
+            .instanceSize = static_cast<uint32_t>(width * height),
+            .instanceCount = 1U,
+            .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            .allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+            });
+
+        stagingBuffer->map();
+        {
+            std::memcpy(stagingBuffer->memory(), fontPixels, static_cast<size_t>(width * height));
+            stagingBuffer->flush();
+        }
+        stagingBuffer->unmap();
+
+        coffee::graphics::SingleTime::copyBufferToImage(device, backendData->fonts, stagingBuffer);
+
+        backendData->fontsView = coffee::graphics::ImageView::create(backendData->fonts, {
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = VK_FORMAT_R8_UNORM,
+            .components = {
+                .r = VK_COMPONENT_SWIZZLE_ONE,
+                .g = VK_COMPONENT_SWIZZLE_ONE,
+                .b = VK_COMPONENT_SWIZZLE_ONE,
+                .a = VK_COMPONENT_SWIZZLE_R
+            }
+        });
+    }
+
+    void ImGuiImplementation::createDescriptors()
+    {
+        ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+
+        const std::map<uint32_t, coffee::graphics::DescriptorBindingInfo> bindings{
+            { 0, {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
+        };
+
+        backendData->layout = coffee::graphics::DescriptorLayout::create(device, bindings);
+        backendData->descriptorSet = coffee::graphics::DescriptorSet::create(device, coffee::graphics::DescriptorWriter(backendData->layout)
+            .addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, backendData->fontsView, backendData->fontsSampler));
+    }
+
+    void ImGuiImplementation::createRenderPass()
+    {
+        ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+
+        backendData->renderPass = coffee::graphics::RenderPass::create(device, {
+            .colorAttachments = { coffee::graphics::AttachmentConfiguration {
+                .format = device->surfaceFormat(),
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+            }}
+        });
+    }
+
+    void ImGuiImplementation::createPipeline()
+    {
+        ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
+
+        backendData->pipeline = coffee::graphics::Pipeline::create(device, backendData->renderPass, {
+            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
+                coffee::graphics::ShaderModule::create(device, imguiVertexShader, VK_SHADER_STAGE_VERTEX_BIT),
+                coffee::graphics::ShaderModule::create(device, imguiFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+            }),
+            .layouts = {
+                backendData->layout
+            },
+            .inputBindings = { coffee::graphics::InputBinding {
+                .binding = 0U,
+                .stride = sizeof(ImDrawVert),
+                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+                .elements = {
+                    coffee::graphics::InputElement {.location = 0U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, pos) },
+                    coffee::graphics::InputElement {.location = 1U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, uv) },
+                    coffee::graphics::InputElement {.location = 2U, .format = VK_FORMAT_R8G8B8A8_UNORM, .offset = offsetof(ImDrawVert, col) }
+                }
+            }},
+            .constantRanges = { coffee::graphics::PushConstantRange {
+                .stages = VK_SHADER_STAGE_VERTEX_BIT,
+                .size = static_cast<uint32_t>(sizeof(ImGuiPushConstant))
+            }},
+            .rasterizationInfo = {
+                .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE
+            },
+            .colorBlendAttachment = {
+                .blendEnable = true,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .alphaBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
+            },
+            .depthStencilInfo = {
+                .depthTestEnable = false,
+                .depthWriteEnable = false,
+                .depthCompareOp = VK_COMPARE_OP_NEVER
+            }
+        });
+    }
+
+    void ImGuiImplementation::focusCallback(const coffee::graphics::Window& window, const coffee::WindowFocusEvent& e)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddFocusEvent(!e.lost);
+    }
+
+    void ImGuiImplementation::enterCallback(const coffee::graphics::Window& window, const coffee::WindowEnterEvent& e)
+    {
+        if (window.cursorState() == coffee::graphics::CursorState::Disabled) {
+            return;
+        }
+
+        ImGuiIO& io = ImGui::GetIO();
+        ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(io.BackendPlatformUserData);
+
+        if (e.entered) {
+            backendData->windowPtr = &window;
+
+            io.AddMousePosEvent(backendData->lastMousePos.x, backendData->lastMousePos.y);
+        }
+        else if (backendData->windowPtr == &window) {
+            backendData->windowPtr = nullptr;
+            backendData->lastMousePos = io.MousePos;
+
+            io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+        }
+    }
+
+    void ImGuiImplementation::mouseClickCallback(const coffee::graphics::Window& window, const coffee::MouseClickEvent& e)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+
+        io.AddKeyEvent(ImGuiMod_Ctrl, e.control);
+        io.AddKeyEvent(ImGuiMod_Shift, e.shift);
+        io.AddKeyEvent(ImGuiMod_Alt, e.alt);
+        io.AddKeyEvent(ImGuiMod_Super, e.super);
+
+        uint8_t button = static_cast<uint8_t>(e.button);
+        if (button >= 0 && button < ImGuiMouseButton_COUNT) {
+            io.AddMouseButtonEvent(button, e.state == coffee::State::Press);
+        }
+    }
+
+    void ImGuiImplementation::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(io.BackendPlatformUserData);
+
+        float xPosition = e.x;
+        float yPosition = e.y;
+
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            VkOffset2D windowPosition = window.windowPosition();
+            xPosition += windowPosition.x;
+            yPosition += windowPosition.y;
+        }
+
+        io.AddMousePosEvent(xPosition, yPosition);
+        backendData->lastMousePos = { xPosition, yPosition };
+    }
+
+    void ImGuiImplementation::mouseWheelCallback(const coffee::graphics::Window& window, const coffee::MouseWheelEvent& e)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddMouseWheelEvent(e.x, e.y);
+    }
+
+    void ImGuiImplementation::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e)
+    {
+        if (e.state != coffee::State::Press && e.state != coffee::State::Release) {
+            return;
+        }
+
+        ImGuiIO& io = ImGui::GetIO();
+
+        io.AddKeyEvent(ImGuiMod_Ctrl, e.control);
+        io.AddKeyEvent(ImGuiMod_Shift, e.shift);
+        io.AddKeyEvent(ImGuiMod_Alt, e.alt);
+        io.AddKeyEvent(ImGuiMod_Super, e.super);
+
+        ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+        backendData->keyOwnerWindows[static_cast<uint32_t>(e.key)] = (e.state == coffee::State::Press) ? &window : nullptr;
+
+        ImGuiKey key = keyToImGui(e.key);
+        io.AddKeyEvent(key, e.state == coffee::State::Press);
+        io.SetKeyEventNativeData(key, static_cast<int>(e.key), static_cast<int>(e.scancode));
+    }
+
+    void ImGuiImplementation::charCallback(const coffee::graphics::Window& window, char32_t ch)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddInputCharacter(ch);
+    }
+
+    void ImGuiImplementation::updateMonitors()
+    {
+        ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
+        platformIO.Monitors.resize(0);
+
+        for (const auto& monitor : coffee::graphics::Monitor::monitors()) {
+            ImGuiPlatformMonitor imGuiMonitor{};
+
+            VkExtent2D position = monitor->position();
+            imGuiMonitor.MainPos = imGuiMonitor.WorkPos =
+                ImVec2{ static_cast<float>(position.width), static_cast<float>(position.height) };
+
+            coffee::graphics::VideoMode videoMode = monitor->currentVideoMode();
+            imGuiMonitor.MainSize = imGuiMonitor.WorkSize =
+                ImVec2{ static_cast<float>(videoMode.width), static_cast<float>(videoMode.height) };
+
+            VkRect2D workArea = monitor->workArea();
+            if (workArea.extent.width > 0 && workArea.extent.height > 0) {
+                imGuiMonitor.WorkPos = ImVec2{ static_cast<float>(workArea.offset.x), static_cast<float>(workArea.offset.y) };
+                imGuiMonitor.WorkSize = ImVec2{ static_cast<float>(workArea.extent.width), static_cast<float>(workArea.extent.height) };
+            }
+
+            coffee::Float2D scale = monitor->contentScale();
+            imGuiMonitor.DpiScale = scale.x;
+
+            platformIO.Monitors.push_back(imGuiMonitor);
+        }
+    }
+
+    void ImGuiImplementation::updateMouse(const coffee::graphics::WindowPtr& applicationWindow)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
+        ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(io.BackendPlatformUserData);
+
+        if (backendData->fullControlWindowPtr != nullptr) {
+            if (!backendData->fullControlWindowPtr->isButtonPressed(coffee::Keys::Escape)) {
+                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+                return;
+            }
+
+            backendData->fullControlWindowPtr = nullptr;
+        }
+
+        ImGuiID mouseViewportID = 0;
+        const ImVec2 previousMousePosition = io.MousePos;
+
+        for (int32_t i = 0; i < platformIO.Viewports.Size; i++) {
+            ImGuiViewport* viewport = platformIO.Viewports[i];
+            coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
+
+            if (window->isFocused()) {
+                if (io.WantSetMousePos) {
+                    window->setMousePosition({ previousMousePosition.x - viewport->Pos.x, previousMousePosition.y - viewport->Pos.y });
+                }
+
+                if (backendData->windowPtr == nullptr) {
+                    coffee::Float2D mousePosition = window->mousePosition();
+
+                    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+                        VkOffset2D windowPosition = window->windowPosition();
+                        mousePosition.x += windowPosition.x;
+                        mousePosition.y += windowPosition.y;
+                    }
+
+                    backendData->lastMousePos = ImVec2{ mousePosition.x, mousePosition.y };
+                    io.AddMousePosEvent(mousePosition.x, mousePosition.y);
+                }
+            }
+
+            bool windowNoInput = (viewport->Flags & ImGuiViewportFlags_NoInputs) != 0;
+
+            windowNoInput ? window->enablePassthrough() : window->disablePassthrough();
+
+            if (window->isFocused() && !windowNoInput) {
+                mouseViewportID = viewport->ID;
+            }
+        }
+
+        if (io.BackendFlags & ImGuiBackendFlags_HasMouseHoveredViewport) {
+            io.AddMouseViewportEvent(mouseViewportID);
+        }
+    }
+
+    void ImGuiImplementation::updateCursor(const coffee::graphics::WindowPtr& applicationWindow)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+
+        if (static_cast<ImGuiBackendPlatformData*>(io.BackendPlatformUserData)->fullControlWindowPtr != nullptr) {
+            return;
+        }
+
+        ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
+        ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+        ImGuiPlatformIO& platformIO = ImGui::GetPlatformIO();
+
+        for (int32_t i = 0; i < platformIO.Viewports.Size; i++) {
+            ImGuiViewport* viewport = platformIO.Viewports[i];
+            coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
+
+            if (cursor == ImGuiMouseCursor_None || io.MouseDrawCursor) {
+                window->hideCursor();
+                continue;
+            }
+
+            window->setCursor(backendData->cursors[cursor]);
+            window->showCursor();
+        }
+    }
+
+} // namespace yorna

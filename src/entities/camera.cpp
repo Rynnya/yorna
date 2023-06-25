@@ -4,7 +4,7 @@
 
 #include <glm/ext/scalar_constants.hpp>
 
-namespace editor {
+namespace yorna {
 
     void Camera::setOrthographicProjection(float left, float right, float top, float bottom, float near, float far) {
         projectionMatrix_ = glm::mat4 { 1.0f };

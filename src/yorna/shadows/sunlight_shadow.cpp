@@ -1,8 +1,8 @@
-#include <systems/shadows/sunlight_shadow.hpp>
+#include <yorna/shadows/sunlight_shadow.hpp>
 
 #include <coffee/objects/vertex.hpp>
 
-namespace editor {
+namespace yorna {
 
     static constexpr std::array<VkClearValue, 1> depthClearValues = {
         VkClearValue { .depthStencil = { 0.0f, 0U } }

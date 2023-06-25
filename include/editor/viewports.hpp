@@ -1,13 +1,15 @@
-#ifndef SYSTEMS_IMGUI_VIEWPORTS
-#define SYSTEMS_IMGUI_VIEWPORTS
+#ifndef YORNA_EDITOR_VIEWPORTS
+#define YORNA_EDITOR_VIEWPORTS
 
-#include <systems/imgui/entities.hpp>
+#include <editor/entities.hpp>
+
+#include <coffee/interfaces/filesystem.hpp>
 
 #include <imgui_file_dialog.h>
 
 #include <filesystem>
 
-namespace editor {
+namespace yorna {
 
     struct ProjectInformation {
         ImGuiFileDialog dialog {};
@@ -56,7 +58,6 @@ namespace editor {
     };
 
     struct DirectoryObject {
-
         enum class Type {
             Unknown = 0,
             Directory = 1,
@@ -65,12 +66,11 @@ namespace editor {
             Shader = 4,
             CompiledShader = 5,
             Audio = 6
-        };
+        } type = Type::Unknown;
 
         std::filesystem::path relativePath {};
         std::u8string filename {};
         bool selected = false;
-        Type type = Type::Unknown;
     };
 
     struct AssetBrowserViewport : Viewport {

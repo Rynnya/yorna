@@ -4,4 +4,5 @@ build/
 shaders/*.vert.spv
 shaders/*.frag.spv
 imgui.ini
-/engine/include/coffee/graphics/device.hpp
+amazon.fs
+sponza.fs

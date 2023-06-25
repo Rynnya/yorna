@@ -45,9 +45,6 @@ add_custom_target(${SHADERS_PROJECT} DEPENDS ${DEPENDENCIES_SHADERS})
 add_dependencies(${PROJECT_NAME} ${SHADERS_PROJECT})
 list(APPEND SOURCES ${SHADERS_SOURCES})
 
-# TODO: Remove me once non-editor version of game will be done
-add_compile_definitions(COFFEE_EDITOR_ENABLED)
-
 IF(MSVC)
     set_target_properties(imgui glm PROPERTIES
         VS_GLOBAL_VcpkgEnabled FALSE

@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace editor {
+namespace yorna {
 
     glm::mat4 TransformComponent::mat4() const noexcept {
         const float c3 = glm::cos(rotation.z);

@@ -1,11 +1,11 @@
-#ifndef ENTITIES_TRANSFORM_COMPONENT
-#define ENTITIES_TRANSFORM_COMPONENT
+#ifndef YORNA_ENTITIES_TRANSFORM_COMPONENT
+#define YORNA_ENTITIES_TRANSFORM_COMPONENT
 
 #include <coffee/utils/non_copyable.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace editor {
+namespace yorna {
 
     struct TransformComponent {
         glm::vec3 translation {};

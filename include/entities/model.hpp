@@ -1,11 +1,11 @@
-#ifndef ENTITIES_MODEL
-#define ENTITIES_MODEL
+#ifndef YORNA_ENTITIES_MODEL
+#define YORNA_ENTITIES_MODEL
 
 #include <coffee/coffee.hpp>
 
 #include <entities/transform_component.hpp>
 
-namespace editor {
+namespace yorna {
 
     // TODO: Made it compatable with entt
 
@@ -25,19 +25,18 @@ namespace editor {
         void updateMeshesInformation();
 
         const coffee::graphics::DevicePtr& device;
-        TransformComponent transform {};
         coffee::ModelPtr model = nullptr;
+        TransformComponent transform {};
         std::vector<size_t> visibleMeshes {};
         std::vector<MeshInformation> meshesInformation {};
-        coffee::graphics::DescriptorLayoutPtr layout = nullptr;
         std::vector<coffee::graphics::BufferPtr> meshesInformationBuffers {};
+        coffee::graphics::DescriptorLayoutPtr layout = nullptr;
         std::vector<coffee::graphics::DescriptorSetPtr> descriptors {};
 
     private:
         void initialize(const coffee::graphics::SamplerPtr& textureSampler);
     };
 
-    using UModel = std::unique_ptr<Model>;
 }
 
 #endif
