@@ -19,9 +19,9 @@ namespace yorna {
         // This flag must be set to window than took full control over mouse
         // Basically means when window->disableCursor() called
         const coffee::graphics::Window* fullControlWindowPtr = nullptr;
-        const coffee::graphics::Window* keyOwnerWindows[static_cast<uint32_t>(coffee::Keys::Last)]{};
+        const coffee::graphics::Window* keyOwnerWindows[static_cast<uint32_t>(coffee::Keys::Last)] {};
         coffee::graphics::CursorPtr cursors[ImGuiMouseCursor_COUNT] {};
-        ImVec2 lastMousePos{};
+        ImVec2 lastMousePos {};
         bool wantUpdateMonitors = false;
     };
 
@@ -88,6 +88,6 @@ namespace yorna {
         bool acquired = false;
     };
 
-}
+} // namespace yorna
 
 #endif

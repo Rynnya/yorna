@@ -19,7 +19,8 @@ namespace yorna {
             const coffee::graphics::DevicePtr& device,
             const coffee::AssetManagerPtr& assetManager,
             const coffee::FilesystemPtr& filesystem,
-            uint32_t mapSize = 1024);
+            uint32_t mapSize = 1024
+        );
         ~SunLightShadow() noexcept = default;
 
         void beginRender(const coffee::graphics::CommandBuffer& commandBuffer);
@@ -28,16 +29,19 @@ namespace yorna {
         DirectionalLight& lightObject() noexcept;
         Camera& camera() noexcept;
 
-        coffee::graphics::SamplerPtr shadowSampler() const noexcept;
-        coffee::graphics::ImagePtr depthMap() const noexcept;
-        coffee::graphics::ImageViewPtr depthMapView() const noexcept;
+        coffee::graphics::SamplerPtr sampler() const noexcept;
+        coffee::graphics::ImagePtr map() const noexcept;
+        coffee::graphics::ImageViewPtr mapView() const noexcept;
         coffee::graphics::PipelinePtr pipeline() const noexcept;
 
     private:
         coffee::graphics::DevicePtr device_;
         uint32_t mapSize_;
 
+        // clang-format off
         DirectionalLight sunlight_ { glm::vec3 { 1.0f, 1.0f, 1.0f } };
+        // clang-format on
+
         Camera sunlightCamera_ {};
 
         coffee::graphics::SamplerPtr shadowSampler_;
@@ -49,6 +53,6 @@ namespace yorna {
         coffee::graphics::PipelinePtr pipeline_;
     };
 
-}
+} // namespace yorna
 
 #endif

@@ -34,7 +34,8 @@ namespace yorna {
         vkDestroyQueryPool(device_->logicalDevice(), pool_, nullptr);
     }
 
-    void QueryTimestamps::resetQueryPool(const coffee::graphics::CommandBuffer& commandBuffer) {
+    void QueryTimestamps::resetQueryPool(const coffee::graphics::CommandBuffer& commandBuffer)
+    {
         if (pool_ == VK_NULL_HANDLE || !writtenBeginIndices_.empty() || !writtenEndIndices_.empty()) {
             return;
         }
@@ -42,7 +43,8 @@ namespace yorna {
         vkCmdResetQueryPool(commandBuffer, pool_, 0, kIndicesPerTimestamp * amountOfTimestamps_);
     }
 
-    void QueryTimestamps::writeBeginTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index) {
+    void QueryTimestamps::writeBeginTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index)
+    {
         if (pool_ == VK_NULL_HANDLE) {
             return;
         }
@@ -57,7 +59,8 @@ namespace yorna {
         writtenBeginIndices_.push_back(index);
     }
 
-    void QueryTimestamps::writeEndTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index) {
+    void QueryTimestamps::writeEndTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index)
+    {
         if (pool_ == VK_NULL_HANDLE) {
             return;
         }
@@ -141,4 +144,4 @@ namespace yorna {
         return 0.0f;
     }
 
-}
+} // namespace yorna

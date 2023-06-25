@@ -47,8 +47,8 @@ namespace yorna {
     };
 
     struct DirectionalLightUBO {
-        glm::vec4 direction{};
-        glm::vec4 color{};
+        glm::vec4 direction {};
+        glm::vec4 color {};
     };
 
     struct LightUniformBuffer {
@@ -126,7 +126,7 @@ namespace yorna {
 
         float lookSpeed = 0.003f;
         float moveSpeed = 10.0f;
-        std::unique_ptr<Model> sponzaModel;
+        std::unique_ptr<Model> model;
 
         std::vector<PointLight> pointLights {};
         std::vector<SpotLight> spotLights {};
@@ -151,10 +151,10 @@ namespace yorna {
 
         coffee::graphics::DescriptorLayoutPtr gameLayout;
 
-        std::array<FrameInfo, coffee::graphics::Device::kMaxOperationsInFlight> frameInfos{};
+        std::array<FrameInfo, coffee::graphics::Device::kMaxOperationsInFlight> frameInfos {};
         uint32_t frameInfoIndex = 0;
     };
 
-}
+} // namespace yorna
 
 #endif

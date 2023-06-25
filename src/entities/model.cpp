@@ -11,7 +11,8 @@ namespace yorna {
         initialize(textureSampler);
     }
 
-    void Model::updateMeshesInformation() {
+    void Model::updateMeshesInformation()
+    {
         for (size_t i = 0; i < meshesInformationBuffers.size(); i++) {
             const auto& buffer = meshesInformationBuffers[i];
 
@@ -22,7 +23,8 @@ namespace yorna {
         }
     }
 
-    void Model::initialize(const coffee::graphics::SamplerPtr& textureSampler) {
+    void Model::initialize(const coffee::graphics::SamplerPtr& textureSampler)
+    {
         const auto& meshes = model->meshes;
         meshesInformation.resize(meshes.size());
 
@@ -76,4 +78,4 @@ namespace yorna {
         updateMeshesInformation();
     }
 
-}
+} // namespace yorna

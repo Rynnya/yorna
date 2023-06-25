@@ -39,6 +39,6 @@ namespace yorna {
         AssetBrowserViewport assetBrowser {};
     };
 
-}
+} // namespace yorna
 
 #endif

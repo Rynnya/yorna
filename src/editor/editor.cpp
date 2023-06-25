@@ -177,17 +177,19 @@ namespace yorna {
                 ImVec2 currentCursorPosition = ImGui::GetCursorScreenPos();
                 ImVec2 contentRegion = ImGui::GetContentRegionAvail();
 
-                gameHandle.outputAspect
-                    .store(sceneViewport.keepAspectRatio ? 16.0f / 9.0f : contentRegion.x / contentRegion.y, std::memory_order_relaxed);
+                gameHandle.outputAspect.store(
+                    sceneViewport.keepAspectRatio ? 16.0f / 9.0f : contentRegion.x / contentRegion.y,
+                    std::memory_order_relaxed
+                );
 
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, { 0.0f, 0.0f });
 
                 if (ImGui::ImageButton(
-                    "VP1: Take control",
-                    &framebufferImage,
-                    contentRegion,
-                    ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_PressedOnClick
-                )) {
+                        "VP1: Take control",
+                        &framebufferImage,
+                        contentRegion,
+                        ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_PressedOnClick
+                    )) {
                     if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                         // TODO: ?
                     }
@@ -204,28 +206,28 @@ namespace yorna {
                 if (sceneViewport.outputFramerateAndFPS) {
                     ImVec2 textPosition = { currentCursorPosition.x + 10, currentCursorPosition.y + 10 };
 
-                    std::string framerateAndFPS = std::format("{:.3f} ms/frame ({:.1f} FPS)",
-                        calculateAverage(sceneViewport.averageFrameTime), calculateAverage(sceneViewport.averageFPS));
-                    ImGui::GetWindowDrawList()->AddText(
-                        textPosition, IM_COL32(0, 255, 0, 255), framerateAndFPS.data(), framerateAndFPS.data() + framerateAndFPS.size());
+                    std::string framerateAndFPS = std::format(
+                        "{:.3f} ms/frame ({:.1f} FPS)",
+                        calculateAverage(sceneViewport.averageFrameTime),
+                        calculateAverage(sceneViewport.averageFPS)
+                    );
+                    ImGui::GetWindowDrawList()
+                        ->AddText(textPosition, IM_COL32(0, 255, 0, 255), framerateAndFPS.data(), framerateAndFPS.data() + framerateAndFPS.size());
 
                     textPosition.y += 15;
-                    std::string imguiCPUTime = std::format("ImGUI CPU: {:.6f} ms",
-                        calculateAverage(sceneViewport.averageImGuiTime));
-                    ImGui::GetWindowDrawList()->AddText(
-                        textPosition, IM_COL32(0, 255, 0, 255), imguiCPUTime.data(), imguiCPUTime.data() + imguiCPUTime.size());
+                    std::string imguiCPUTime = std::format("ImGUI CPU: {:.6f} ms", calculateAverage(sceneViewport.averageImGuiTime));
+                    ImGui::GetWindowDrawList()
+                        ->AddText(textPosition, IM_COL32(0, 255, 0, 255), imguiCPUTime.data(), imguiCPUTime.data() + imguiCPUTime.size());
 
                     textPosition.y += 15;
-                    std::string depthPass = std::format("Depth pass: {:.6f} ms",
-                        calculateAverage(sceneViewport.averageDepthPass));
-                    ImGui::GetWindowDrawList()->AddText(
-                        textPosition, IM_COL32(0, 255, 0, 255), depthPass.data(), depthPass.data() + depthPass.size());
+                    std::string depthPass = std::format("Depth pass: {:.6f} ms", calculateAverage(sceneViewport.averageDepthPass));
+                    ImGui::GetWindowDrawList()
+                        ->AddText(textPosition, IM_COL32(0, 255, 0, 255), depthPass.data(), depthPass.data() + depthPass.size());
 
                     textPosition.y += 15;
-                    std::string rendering = std::format("Rendering: {:.6f} ms",
-                        calculateAverage(sceneViewport.averageRendering));
-                    ImGui::GetWindowDrawList()->AddText(
-                        textPosition, IM_COL32(0, 255, 0, 255), rendering.data(), rendering.data() + rendering.size());
+                    std::string rendering = std::format("Rendering: {:.6f} ms", calculateAverage(sceneViewport.averageRendering));
+                    ImGui::GetWindowDrawList()
+                        ->AddText(textPosition, IM_COL32(0, 255, 0, 255), rendering.data(), rendering.data() + rendering.size());
 
                     textPosition.y += 15;
                     std::array<VmaBudget, VK_MAX_MEMORY_HEAPS> budgets = device->heapBudgets();
@@ -235,18 +237,15 @@ namespace yorna {
                         float percentage = static_cast<float>(budget.usage) / static_cast<float>(budget.budget) * 100.0f;
 
                         textPosition.y += 15;
-                        std::string overallUsage = std::format("VRAM: {:.2f}/{:.2f} mb ({:.2f}%)",
+                        std::string overallUsage = std::format(
+                            "VRAM: {:.2f}/{:.2f} mb ({:.2f}%)",
                             budget.usage / bytesToMegabytes,
                             budget.budget / bytesToMegabytes,
                             percentage
                         );
 
-                        ImGui::GetWindowDrawList()->AddText(
-                            textPosition,
-                            IM_COL32(0, 255, 0, 255),
-                            overallUsage.data(),
-                            overallUsage.data() + overallUsage.size()
-                        );
+                        ImGui::GetWindowDrawList()
+                            ->AddText(textPosition, IM_COL32(0, 255, 0, 255), overallUsage.data(), overallUsage.data() + overallUsage.size());
                     }
 
                     if (sceneViewport.hostHeapIndex != SceneViewport::kInvalidHeapIndex) {
@@ -261,12 +260,8 @@ namespace yorna {
                             percentage
                         );
 
-                        ImGui::GetWindowDrawList()->AddText(
-                            textPosition,
-                            IM_COL32(0, 255, 0, 255),
-                            overallUsage.data(),
-                            overallUsage.data() + overallUsage.size()
-                        );
+                        ImGui::GetWindowDrawList()
+                            ->AddText(textPosition, IM_COL32(0, 255, 0, 255), overallUsage.data(), overallUsage.data() + overallUsage.size());
                     }
 
                     if (sceneViewport.sharedHeapIndex != SceneViewport::kInvalidHeapIndex) {
@@ -281,12 +276,8 @@ namespace yorna {
                             percentage
                         );
 
-                        ImGui::GetWindowDrawList()->AddText(
-                            textPosition,
-                            IM_COL32(0, 255, 0, 255),
-                            overallUsage.data(),
-                            overallUsage.data() + overallUsage.size()
-                        );
+                        ImGui::GetWindowDrawList()
+                            ->AddText(textPosition, IM_COL32(0, 255, 0, 255), overallUsage.data(), overallUsage.data() + overallUsage.size());
                     }
                 }
 
@@ -370,15 +361,9 @@ namespace yorna {
         sceneViewport.statisticIndex = (sceneViewport.statisticIndex + 1) % SceneViewport::kAverageStatisticBufferSize;
     }
 
-    void Editor::createProject()
-    {
+    void Editor::createProject() {}
 
-    }
-
-    void Editor::loadProject()
-    {
-
-    }
+    void Editor::loadProject() {}
 
     void Editor::loadAssetDirectory()
     {
@@ -426,9 +411,9 @@ namespace yorna {
     void Editor::saveProject()
     {
         std::string rawFilePath = projectInformation.dialog.GetFilePathName();
-        std::filesystem::path filePath = std::u8string{ rawFilePath.begin(), rawFilePath.end() };
+        std::filesystem::path filePath = std::u8string { rawFilePath.begin(), rawFilePath.end() };
 
-        std::ifstream stream{ filePath };
+        std::ifstream stream { filePath };
         nlohmann::json parsedProject = nlohmann::json::parse(stream);
 
         constexpr uint32_t currentVersion = 1;
@@ -478,8 +463,7 @@ namespace yorna {
     {
         while (entity != entt::null) {
             auto& hierachyComponent = sceneHierarchy.components.get<HierarchyComponent>(entity);
-            ImGuiTreeNodeFlags flags =
-                ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_OpenOnArrow;
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_OpenOnArrow;
 
             if (hierachyComponent.firstChild == entt::null) {
                 flags |= ImGuiTreeNodeFlags_Leaf;
@@ -487,7 +471,9 @@ namespace yorna {
 
             bool opened = ImGui::TreeNode(
                 reinterpret_cast<void*>(static_cast<uintptr_t>(static_cast<std::underlying_type_t<entt::entity>>(entity))),
-                hierachyComponent.tag.data(), hierachyComponent.tag.data() + hierachyComponent.tag.size(), flags
+                hierachyComponent.tag.data(),
+                hierachyComponent.tag.data() + hierachyComponent.tag.size(),
+                flags
             );
 
             if (ImGui::BeginPopupContextItem(nullptr, ImGuiMouseButton_Right)) {
@@ -599,10 +585,8 @@ namespace yorna {
 
                         previousHierarchyComponent.next = entt::null;
                     }
-                    else {
-                        if (hierachyComponent.parent != entt::null) {
-                            sceneHierarchy.components.get<HierarchyComponent>(hierachyComponent.parent).firstChild = hierachyComponent.next;
-                        }
+                    else if (hierachyComponent.parent != entt::null) {
+                        sceneHierarchy.components.get<HierarchyComponent>(hierachyComponent.parent).firstChild = hierachyComponent.next;
                     }
 
                     removeChilds(hierachyComponent.firstChild);
@@ -635,4 +619,4 @@ namespace yorna {
         }
     }
 
-}
+} // namespace yorna

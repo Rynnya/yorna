@@ -28,6 +28,6 @@ namespace yorna {
         std::vector<uint32_t> writtenEndIndices_ {};
     };
 
-}
+} // namespace yorna
 
 #endif

@@ -37,6 +37,6 @@ namespace yorna {
         void initialize(const coffee::graphics::SamplerPtr& textureSampler);
     };
 
-}
+} // namespace yorna
 
 #endif

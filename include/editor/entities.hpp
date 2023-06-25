@@ -17,6 +17,6 @@ namespace yorna {
         std::string tag {};
     };
 
-}
+} // namespace yorna
 
 #endif

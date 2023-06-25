@@ -5,13 +5,24 @@
 
 #include <glm/glm.hpp>
 
+// Windows again doing it dirty hacks ;-;
+#undef near
+#undef far
+
 namespace yorna {
 
     class Camera {
     public:
         static constexpr size_t kAmountOfPlanes = 6;
 
-        void setOrthographicProjection(float left = -1.0f, float right = 1.0f, float top = -1.0f, float bottom = 1.0f, float near = -1.0f, float far = 1.0f);
+        void setOrthographicProjection(
+            float left = -1.0f,
+            float right = 1.0f,
+            float top = -1.0f,
+            float bottom = 1.0f,
+            float near = -1.0f,
+            float far = 1.0f
+        );
         void setPerspectiveProjection(float fovy, float aspect, float near = 0.1f, float far = 1000.0f);
         void setReversePerspectiveProjection(float fovy, float aspect, float near = 0.1f);
 
@@ -35,6 +46,6 @@ namespace yorna {
         glm::mat4 inverseViewMatrix_ { 1.0f };
     };
 
-}
+} // namespace yorna
 
 #endif

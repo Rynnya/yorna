@@ -16,6 +16,6 @@ namespace yorna {
         glm::mat3 normal() const noexcept;
     };
 
-}
+} // namespace yorna
 
 #endif

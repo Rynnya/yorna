@@ -4,10 +4,7 @@
 
 namespace yorna {
 
-    PointLight::PointLight(float intensity, glm::vec3 color) noexcept
-        : intensity { intensity }
-        , color { color }
-    {}
+    PointLight::PointLight(float intensity, glm::vec3 color) noexcept : intensity { intensity }, color { color } {}
 
     SpotLight::SpotLight(float coneAngle, glm::vec3 direction, float intensity, glm::vec3 color) noexcept
         : coneAngle { glm::radians(coneAngle) }
@@ -22,4 +19,4 @@ namespace yorna {
         , color { color }
     {}
 
-}
+} // namespace yorna

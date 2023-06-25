@@ -49,7 +49,8 @@ namespace yorna {
             u8"<Безымянный>",
             u8"",
         };
-    }
+
+    } // namespace detail
 
     CurrentLocale currentLocale = CurrentLocale::EN;
 
@@ -72,7 +73,8 @@ namespace yorna {
         UnnamedEntity,
     };
 
-    inline const char* localizeName(LocaleName name) noexcept {
+    inline const char* localizeName(LocaleName name) noexcept
+    {
         switch (currentLocale) {
             case CurrentLocale::RU:
                 return reinterpret_cast<const char*>(detail::ruLocale[static_cast<uint32_t>(name)]);
@@ -81,6 +83,6 @@ namespace yorna {
         }
     }
 
-}
+} // namespace yorna
 
 #endif

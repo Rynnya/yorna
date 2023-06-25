@@ -15,11 +15,10 @@ namespace ImGui {
             void* nextCallbackData = nullptr;
         };
 
-        constexpr float DegreesToRadians(float degrees) {
-            return degrees * (IM_PI / 180);
-        }
+        constexpr float DegreesToRadians(float degrees) { return degrees * (IM_PI / 180); }
 
-        static int InputTextCallback(ImGuiInputTextCallbackData* data) {
+        static int InputTextCallback(ImGuiInputTextCallbackData* data)
+        {
             InputTextCallbackUserData* userData = static_cast<InputTextCallbackUserData*>(data->UserData);
 
             if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
@@ -34,17 +33,18 @@ namespace ImGui {
             return 0;
         }
 
-    }
+    } // namespace Detail
 
     bool DrawButtonBillboard(
-        const char* text, 
+        const char* text,
         const ImVec4& textColor,
-        const char* imageID, 
-        ImTextureID textureID, 
+        const char* imageID,
+        ImTextureID textureID,
         const ImVec2& size,
         const ImVec2& textOffset = {},
         ImGuiButtonFlags flags = 0
-    ) {
+    )
+    {
         ImGuiWindow* window = GetCurrentWindow();
         ImVec2 currentCursorPosition = GetCursorScreenPos();
         ImVec2 textCursorPosition = { currentCursorPosition.x + textOffset.x, currentCursorPosition.y + textOffset.y };
@@ -55,7 +55,8 @@ namespace ImGui {
         return pressed;
     }
 
-    bool TreeNode(const void* ptrID, const char* beginText, const char* endText, ImGuiTreeNodeFlags flags = 0) {
+    bool TreeNode(const void* ptrID, const char* beginText, const char* endText, ImGuiTreeNodeFlags flags = 0)
+    {
         ImGuiWindow* window = GetCurrentWindow();
 
         if (window->SkipItems) {
@@ -66,12 +67,13 @@ namespace ImGui {
     }
 
     bool InputText(
-        const char* label, 
-        std::string* strPtr, 
-        ImGuiInputTextFlags flags = 0, 
+        const char* label,
+        std::string* strPtr,
+        ImGuiInputTextFlags flags = 0,
         ImGuiInputTextCallback callback = nullptr,
         void* callbackData = nullptr
-    ) {
+    )
+    {
         flags |= ImGuiInputTextFlags_CallbackResize;
 
         Detail::InputTextCallbackUserData inputTextCallback {};
@@ -85,20 +87,22 @@ namespace ImGui {
     // Exact size of icon's MUST 96 x 75 pixels or less
 
     inline void DrawSelectableFile(
-        ImDrawList* drawList, 
-        const ImVec2& position, 
-        const std::u8string& text, 
+        ImDrawList* drawList,
+        const ImVec2& position,
+        const std::u8string& text,
         bool& selected,
         ImGuiID id,
         ImU32 color = IM_COL32(255, 255, 255, 255)
-    ) {
+    )
+    {
         const char* textBeginPtr = reinterpret_cast<const char*>(text.data());
         const char* textEndPtr = reinterpret_cast<const char*>(text.data() + text.size());
 
         const float textWrapSize = 96.0f;
         ImVec2 objectNameSize = CalcTextSize(textBeginPtr, textEndPtr, false, textWrapSize);
 
-        PushStyleVar(ImGuiStyleVar_Alpha, 0.2f); ImGuiSelectableFlags_;
+        PushStyleVar(ImGuiStyleVar_Alpha, 0.2f);
+        ImGuiSelectableFlags_;
         PushID(id);
         Selectable("", &selected, 0, { 96.0f, 75.0f + objectNameSize.y });
         PopID();
@@ -107,7 +111,8 @@ namespace ImGui {
         drawList->AddText(nullptr, 0.0f, { position.x, position.y + 75.0f }, color, textBeginPtr, textEndPtr, textWrapSize);
     }
 
-    void DrawFolderIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255)) {
+    void DrawFolderIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255))
+    {
         const ImVec2 folderUpperLeft = { position.x + 3.0f, position.y + 3.0f };
         const ImVec2 upperLeft = { folderUpperLeft.x, folderUpperLeft.y + 9.0f };
         const ImVec2 lowerRight = { folderUpperLeft.x + 90.0f, position.y + 72.0f };
@@ -123,7 +128,8 @@ namespace ImGui {
         drawList->PathStroke(color, 0, 2.0f);
     }
 
-    void DrawFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255)) {
+    void DrawFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255))
+    {
         const ImVec2 upperLeft = { position.x + 23.0f, position.y + 3.0f };
         const ImVec2 lowerLeft = { upperLeft.x, upperLeft.y + 69.0f };
         const ImVec2 lowerRight = { position.x + 73.0f, position.y + 72.0f };
@@ -143,7 +149,8 @@ namespace ImGui {
         drawList->PathStroke(color, 0, 2.0f);
     }
 
-    void DrawUnknownFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255)) {
+    void DrawUnknownFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255))
+    {
         DrawFileIcon(drawList, position, color);
 
         const ImVec2 center = { position.x + 40.0f, position.y + 44.0f };
@@ -155,13 +162,14 @@ namespace ImGui {
         drawList->AddCircleFilled({ center.x, center.y + 18.0f }, 2.0f, color, 16);
     }
 
-    void DrawMeshFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255)) {
+    void DrawMeshFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255))
+    {
         DrawFileIcon(drawList, position, color);
 
         constexpr float verticalDown = 12.0f;
         constexpr float verticalUp = 6.0f;
         constexpr float distanceBetweenFaces = (verticalDown + verticalUp) * 10.0f / 12.0f;
-        
+
         const ImVec2 cubeCenter = { position.x + 44.0f, position.y + 48.0f };
         const ImVec2 lowerFace = { cubeCenter.x, cubeCenter.y + verticalDown + verticalUp };
         const ImVec2 upperFace = { cubeCenter.x, cubeCenter.y - verticalUp - verticalUp };
@@ -175,7 +183,7 @@ namespace ImGui {
         drawList->PathLineTo(lowerRightFace);
         drawList->PathLineTo(upperRightFace);
         drawList->PathStroke(color, 0, 2.0f);
-        
+
         drawList->PathLineTo(lowerFace);
         drawList->PathLineTo(lowerLeftFace);
         drawList->PathLineTo(upperLeftFace);
@@ -186,7 +194,8 @@ namespace ImGui {
         drawList->PathStroke(color, 0, 2.0f);
     }
 
-    void DrawTextureFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255)) {
+    void DrawTextureFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255))
+    {
         DrawFileIcon(drawList, position, color);
 
         const ImVec2 upperLeft = { position.x + 28.0f, position.y + 40.0f };
@@ -202,7 +211,8 @@ namespace ImGui {
         // TODO: Add picture
     }
 
-    void DrawMaterialFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255)) {
+    void DrawMaterialFileIcon(ImDrawList* drawList, const ImVec2& position, ImU32 color = IM_COL32(255, 255, 255, 255))
+    {
         DrawFileIcon(drawList, position, color);
 
         const ImVec2 upperLeft = { position.x + 28.0f, position.y + 34.0f };
@@ -225,7 +235,7 @@ namespace ImGui {
         drawList->PathLineTo({ upperLeft.x + 0.0f, upperLeft.y + 8.0f });
         drawList->PathBezierCubicCurveTo(fp2, fp3, fp4, 16);
 
-        const ImVec2 sp2 = { upperLeft.x + 6.0f,  upperLeft.y + 4.0f };
+        const ImVec2 sp2 = { upperLeft.x + 6.0f, upperLeft.y + 4.0f };
         const ImVec2 sp3 = { upperLeft.x + 12.0f, upperLeft.y + 4.0f };
         const ImVec2 sp4 = { upperLeft.x + 12.0f, upperLeft.y + 8.0f };
         drawList->PathBezierCubicCurveTo(sp2, sp3, sp4, 16);
@@ -256,6 +266,6 @@ namespace ImGui {
         drawList->PathStroke(color, 0, 2.0f);
     }
 
-}
+} // namespace ImGui
 
 #endif

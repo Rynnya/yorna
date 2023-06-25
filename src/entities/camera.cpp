@@ -6,7 +6,8 @@
 
 namespace yorna {
 
-    void Camera::setOrthographicProjection(float left, float right, float top, float bottom, float near, float far) {
+    void Camera::setOrthographicProjection(float left, float right, float top, float bottom, float near, float far)
+    {
         projectionMatrix_ = glm::mat4 { 1.0f };
         projectionMatrix_[0][0] = 2.0f / (right - left);
         projectionMatrix_[1][1] = -2.0f / (bottom - top);
@@ -16,7 +17,8 @@ namespace yorna {
         projectionMatrix_[3][2] = -near / (far - near);
     }
 
-    void Camera::setPerspectiveProjection(float fovy, float aspect, float near, float far) {
+    void Camera::setPerspectiveProjection(float fovy, float aspect, float near, float far)
+    {
         if (glm::abs(aspect - std::numeric_limits<float>::epsilon()) <= 0.0f) {
             return;
         }
@@ -30,7 +32,8 @@ namespace yorna {
         projectionMatrix_[3][2] = -(far * near) / (far - near);
     }
 
-    void Camera::setReversePerspectiveProjection(float fovy, float aspect, float near) {
+    void Camera::setReversePerspectiveProjection(float fovy, float aspect, float near)
+    {
         if (glm::abs(aspect - std::numeric_limits<float>::epsilon()) <= 0.0f) {
             return;
         }
@@ -43,7 +46,8 @@ namespace yorna {
         projectionMatrix_[3][2] = near;
     }
 
-    void Camera::setViewDirection(const glm::vec3& position, const glm::vec3& direction, const glm::vec3& up) {
+    void Camera::setViewDirection(const glm::vec3& position, const glm::vec3& direction, const glm::vec3& up)
+    {
         const glm::vec3 w { glm::normalize(direction) };
         const glm::vec3 u { glm::normalize(glm::cross(w, up)) };
         const glm::vec3 v { glm::cross(w, u) };
@@ -77,16 +81,18 @@ namespace yorna {
         inverseViewMatrix_[3][2] = position.z;
     }
 
-    void Camera::setViewTarget(const glm::vec3& position, const glm::vec3& target, const glm::vec3& up) {
+    void Camera::setViewTarget(const glm::vec3& position, const glm::vec3& target, const glm::vec3& up)
+    {
         COFFEE_ASSERT(
-            glm::distance(target, position) - std::numeric_limits<float>::epsilon() > 0, 
+            glm::distance(target, position) - std::numeric_limits<float>::epsilon() > 0,
             "Distance between target and position must be more than 0."
         );
 
         setViewDirection(position, target - position, up);
     }
 
-    void Camera::setViewYXZ(const glm::vec3& position, const glm::vec3& rotation) {
+    void Camera::setViewYXZ(const glm::vec3& position, const glm::vec3& rotation)
+    {
         const float c3 = glm::cos(rotation.z);
         const float s3 = glm::sin(rotation.z);
         const float c2 = glm::cos(rotation.x);
@@ -126,7 +132,8 @@ namespace yorna {
         inverseViewMatrix_[3][2] = position.z;
     }
 
-    void Camera::recalculateFrustumPlanes() noexcept {
+    void Camera::recalculateFrustumPlanes() noexcept
+    {
         viewProjection_ = projectionMatrix_ * viewMatrix_;
 
         frustumPlanes_[0].x = viewProjection_[0].w + viewProjection_[0].x;
@@ -164,7 +171,8 @@ namespace yorna {
         }
     }
 
-    bool Camera::isInFrustum(const glm::mat4& modelMatrix, const coffee::AABB& aabb) const noexcept {
+    bool Camera::isInFrustum(const glm::mat4& modelMatrix, const coffee::AABB& aabb) const noexcept
+    {
         coffee::AABBPoints points = aabb.transform(modelMatrix);
 
         for (size_t i = 0; i < kAmountOfPlanes; i++) {
@@ -185,16 +193,10 @@ namespace yorna {
         return true;
     }
 
-    const glm::mat4& Camera::projection() const noexcept {
-        return projectionMatrix_;
-    }
+    const glm::mat4& Camera::projection() const noexcept { return projectionMatrix_; }
 
-    const glm::mat4& Camera::view() const noexcept {
-        return viewMatrix_;
-    }
+    const glm::mat4& Camera::view() const noexcept { return viewMatrix_; }
 
-    const glm::mat4& Camera::inverseView() const noexcept {
-        return inverseViewMatrix_;
-    }
+    const glm::mat4& Camera::inverseView() const noexcept { return inverseViewMatrix_; }
 
-}
+} // namespace yorna

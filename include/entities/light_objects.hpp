@@ -31,6 +31,6 @@ namespace yorna {
         glm::vec3 color {};
     };
 
-}
+} // namespace yorna
 
 #endif

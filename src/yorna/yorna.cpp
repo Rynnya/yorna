@@ -8,23 +8,10 @@
 
 namespace yorna {
 
-    static constexpr std::array<VkClearValue, 2> normalClearValues = {
-        VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
-        VkClearValue { .depthStencil = { 0.0f, 0U } }
-    };
+    static constexpr std::array<VkClearValue, 2> normalClearValues = { VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
+                                                                       VkClearValue { .depthStencil = { 0.0f, 0U } } };
 
-    static constexpr std::array<VkClearValue, 1> depthClearValues = {
-        VkClearValue { .depthStencil = { 0.0f, 0U } }
-    };
-
-    std::vector<glm::vec4> lightColors{
-        {1.0f, 0.1f, 0.1f, 3.0f},
-        {0.1f, 0.1f, 1.0f, 3.0f},
-        {0.1f, 1.0f, 0.1f, 3.0f},
-        {1.0f, 1.0f, 0.1f, 3.0f},
-        {0.1f, 1.0f, 1.0f, 3.0f},
-        {1.0f, 1.0f, 1.0f, 3.0f}
-    };
+    static constexpr std::array<VkClearValue, 1> depthClearValues = { VkClearValue { .depthStencil = { 0.0f, 0U } } };
 
     Yorna::Yorna(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler)
         : device { device }
@@ -50,43 +37,22 @@ namespace yorna {
             std::memcpy(frameInfo.mvpBuffer->memory(), &frameInfo.mvpUbo, sizeof(frameInfo.mvpUbo));
             frameInfo.mvpBuffer->flush();
         }
-
-        //for (size_t i = 0; i < lightColors.size(); i++) {
-        //    PointLight& pointLight = pointLights.emplace_back(lightColors[i].a, 0.1f, lightColors[i]);
-        //    auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, (i * glm::two_pi<float>()) / lightColors.size(), { 0.0f, -1.0f, 0.0f });
-        //    pointLight.position = glm::vec3(rotateLight * glm::vec4 { -0.5f, 1.0f, -0.5f, 1.0f });
-        //}
-
-        //window.addWindowResizeCallback("main", [this](const coffee::graphics::Window&, const coffee::graphics::ResizeEvent&) {
-        //    createImages();
-        //    createFramebuffer();
-        //    updateDescriptors();
-        //});
-
-        //window.addMouseClickCallback("main", [](const coffee::graphics::Window& window, const coffee::graphics::MouseClickEvent& e) {
-        //    if (e.button == coffee::graphics::MouseButton::Right) {
-        //        window.disableCursor();
-        //        window.disableTextMode();
-        //    }
-        //});
     }
 
-    Yorna::~Yorna() {
-        device->waitForRelease();
-    }
+    Yorna::~Yorna() { device->waitForRelease(); }
 
-    void Yorna::bindWindow(const coffee::graphics::Window* window) noexcept {
+    void Yorna::bindWindow(const coffee::graphics::Window* window) noexcept
+    {
         boundWindow = window;
 
         if (boundWindow != nullptr) {
-            boundWindow->mouseMoveEvent +=
-                coffee::Callback<const coffee::graphics::Window&, const coffee::MouseMoveEvent&> { this, &Yorna::mousePositionCallback };
-            boundWindow->keyEvent +=
-                coffee::Callback<const coffee::graphics::Window&, const coffee::KeyEvent&> { this, &Yorna::keyCallback };
+            boundWindow->mouseMoveEvent += { this, &Yorna::mousePositionCallback };
+            boundWindow->keyEvent += { this, &Yorna::keyCallback };
         }
     }
 
-    void Yorna::update() {
+    void Yorna::update()
+    {
         cullMeshes();
         updateObjects();
         updateLightPoints();
@@ -94,24 +60,25 @@ namespace yorna {
 
     void Yorna::cullMeshes()
     {
-        auto& meshes = sponzaModel->model->meshes;
-        auto& visibleMeshes = sponzaModel->visibleMeshes;
-        auto sponzaMat4 = sponzaModel->transform.mat4();
+        auto& meshes = model->model->meshes;
+        auto& visibleMeshes = model->visibleMeshes;
+        auto transformationMatrix = model->transform.mat4();
 
         visibleMeshes.clear();
 
         for (size_t i = 0; i < meshes.size(); i++) {
-            if (camera.isInFrustum(sponzaMat4, meshes[i].aabb)) {
+            if (camera.isInFrustum(transformationMatrix, meshes[i].aabb)) {
                 visibleMeshes.push_back(i);
             }
         }
     }
 
-    void Yorna::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer) {
+    void Yorna::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer)
+    {
         const VkRect2D renderArea = {
             .extent = {
                 .width = depthImage->extent.width,
-                .height = depthImage->extent.height
+                .height = depthImage->extent.height,
             }
         };
 
@@ -119,13 +86,13 @@ namespace yorna {
             .width = static_cast<float>(renderArea.extent.width),
             .height = static_cast<float>(renderArea.extent.height),
             .minDepth = 0.0f,
-            .maxDepth = 1.0f
+            .maxDepth = 1.0f,
         };
 
-        auto& meshes = sponzaModel->model->meshes;
-        auto& visibleMeshes = sponzaModel->visibleMeshes;
+        auto& meshes = model->model->meshes;
+        auto& visibleMeshes = model->visibleMeshes;
         auto& frameInfo = frameInfos[frameInfoIndex];
-        auto sponzaMat4 = sponzaModel->transform.mat4();
+        auto transformationMatrix = model->transform.mat4();
 
         commandBuffer.beginRenderPass(earlyDepthPass, earlyDepthFramebuffer, renderArea, depthClearValues.size(), depthClearValues.data());
         commandBuffer.setViewport(viewport);
@@ -133,8 +100,8 @@ namespace yorna {
 
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline, frameInfo.descriptorSet);
-        commandBuffer.pushConstants(earlyDepthPipeline, VK_SHADER_STAGE_VERTEX_BIT, sizeof(sponzaMat4), &sponzaMat4);
-        commandBuffer.bindModel(sponzaModel->model);
+        commandBuffer.pushConstants(earlyDepthPipeline, VK_SHADER_STAGE_VERTEX_BIT, sizeof(transformationMatrix), &transformationMatrix);
+        commandBuffer.bindModel(model->model);
 
         for (size_t meshID : visibleMeshes) {
             commandBuffer.drawMesh(meshes[meshID]);
@@ -143,54 +110,53 @@ namespace yorna {
         commandBuffer.endRenderPass();
     }
 
-    void Yorna::performRendering(const coffee::graphics::CommandBuffer& commandBuffer) {
-        auto& meshes = sponzaModel->model->meshes;
-        auto& visibleMeshes = sponzaModel->visibleMeshes;
+    void Yorna::performRendering(const coffee::graphics::CommandBuffer& commandBuffer)
+    {
+        auto& meshes = model->model->meshes;
+        auto& visibleMeshes = model->visibleMeshes;
 
         auto& frameInfo = frameInfos[frameInfoIndex];
         auto& currentLightBuffer = frameInfo.lightUbo;
-        auto sponzaMat4 = sponzaModel->transform.mat4();
+        auto transformationMatrix = model->transform.mat4();
 
         SunLightShadow::PushConstants shadowConstants {
             .lightSpaceMatrix = frameInfos[frameInfoIndex].lightUbo.sunlightSpaceMatrix,
-            .modelMatrix = sponzaMat4
+            .modelMatrix = transformationMatrix,
         };
 
         sunlightShadow.beginRender(commandBuffer);
         commandBuffer.pushConstants(sunlightShadow.pipeline(), VK_SHADER_STAGE_VERTEX_BIT, sizeof(shadowConstants), &shadowConstants);
-        commandBuffer.bindModel(sponzaModel->model);
-        commandBuffer.drawModel(sponzaModel->model);
+        commandBuffer.bindModel(model->model);
+        commandBuffer.drawModel(model->model);
         sunlightShadow.endRender(commandBuffer);
 
         const VkRect2D renderArea = {
             .extent = {
                 .width = depthImage->extent.width,
-                .height = depthImage->extent.height
+                .height = depthImage->extent.height,
             }
+        };
+
+        const VkViewport viewport = {
+            .width = static_cast<float>(renderArea.extent.width),
+            .height = static_cast<float>(renderArea.extent.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
         };
 
         commandBuffer.beginRenderPass(renderPass, framebuffer, renderArea, normalClearValues.size(), normalClearValues.data());
         commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline);
-        commandBuffer.setViewport({
-            .width = static_cast<float>(renderArea.extent.width),
-            .height = static_cast<float>(renderArea.extent.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f
-        });
+        commandBuffer.setViewport(viewport);
         commandBuffer.setScissor(renderArea);
 
-        mainConstants.transform = sponzaMat4;
-        mainConstants.normal = sponzaModel->transform.normal();
-        commandBuffer.pushConstants(
-            mainPipeline,
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-            sizeof(mainConstants),
-            &mainConstants);
+        mainConstants.transform = transformationMatrix;
+        mainConstants.normal = model->transform.normal();
+        commandBuffer.pushConstants(mainPipeline, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mainConstants), &mainConstants);
         commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, frameInfo.descriptorSet);
-        commandBuffer.bindModel(sponzaModel->model);
+        commandBuffer.bindModel(model->model);
 
         for (size_t meshID : visibleMeshes) {
-            commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, sponzaModel->descriptors[meshID], 1);
+            commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, model->descriptors[meshID], 1);
             commandBuffer.drawMesh(meshes[meshID]);
         }
 
@@ -205,7 +171,8 @@ namespace yorna {
                 lightPointsPipeline,
                 VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 sizeof(lightPointsConstants),
-                &lightPointsConstants);
+                &lightPointsConstants
+            );
             commandBuffer.draw(6);
         }
 
@@ -217,7 +184,8 @@ namespace yorna {
                 lightPointsPipeline,
                 VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 sizeof(lightPointsConstants),
-                &lightPointsConstants);
+                &lightPointsConstants
+            );
             commandBuffer.draw(6);
         }
 
@@ -225,7 +193,8 @@ namespace yorna {
         frameInfoIndex = (frameInfoIndex + 1) % coffee::graphics::Device::kMaxOperationsInFlight;
     }
 
-    void Yorna::updateCamera() {
+    void Yorna::updateCamera()
+    {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
         camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
         camera.recalculateFrustumPlanes();
@@ -239,7 +208,8 @@ namespace yorna {
         frameInfo.mvpBuffer->flush();
     }
 
-    void Yorna::updateObjects() {
+    void Yorna::updateObjects()
+    {
         if (boundWindow == nullptr) {
             updateCamera();
             return;
@@ -252,12 +222,30 @@ namespace yorna {
         const glm::vec3 upDir { 0.0f, 1.0f, 0.0f };
 
         glm::vec3 moveDir { 0.0f };
-        if (boundWindow->isButtonPressed(coffee::Keys::S)) moveDir -= forwardDir;
-        if (boundWindow->isButtonPressed(coffee::Keys::W)) moveDir += forwardDir;
-        if (boundWindow->isButtonPressed(coffee::Keys::A)) moveDir -= rightDir;
-        if (boundWindow->isButtonPressed(coffee::Keys::D)) moveDir += rightDir;
-        if (boundWindow->isButtonPressed(coffee::Keys::LeftShift)) moveDir -= upDir;
-        if (boundWindow->isButtonPressed(coffee::Keys::Space)) moveDir += upDir;
+
+        if (boundWindow->isButtonPressed(coffee::Keys::S)) {
+            moveDir -= forwardDir;
+        }
+
+        if (boundWindow->isButtonPressed(coffee::Keys::W)) {
+            moveDir += forwardDir;
+        }
+
+        if (boundWindow->isButtonPressed(coffee::Keys::A)) {
+            moveDir -= rightDir;
+        }
+
+        if (boundWindow->isButtonPressed(coffee::Keys::D)) {
+            moveDir += rightDir;
+        }
+
+        if (boundWindow->isButtonPressed(coffee::Keys::LeftShift)) {
+            moveDir -= upDir;
+        }
+
+        if (boundWindow->isButtonPressed(coffee::Keys::Space)) {
+            moveDir += upDir;
+        }
 
         if (glm::dot(moveDir, moveDir) > std::numeric_limits<float>::epsilon()) {
             viewerObject.translation += moveSpeed * loopHandler.deltaTime() * glm::normalize(moveDir);
@@ -266,19 +254,20 @@ namespace yorna {
         updateCamera();
     }
 
-    void Yorna::updateLightPoints() {
-        auto rotateLight = glm::rotate(glm::mat4{ 1.0f }, loopHandler.deltaTime(), { 0.0f, -1.0f, 0.0f });
+    void Yorna::updateLightPoints()
+    {
+        auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, loopHandler.deltaTime(), { 0.0f, -1.0f, 0.0f });
         auto& lightUbo = frameInfos[frameInfoIndex].lightUbo;
 
         lightUbo.sunlightSpaceMatrix = sunlightShadow.camera().projection() * sunlightShadow.camera().view();
-        lightUbo.sunlightDirection = glm::vec4{ sunlightShadow.lightObject().direction, 1.0f };
-        lightUbo.sunlightColor = glm::vec4{ sunlightShadow.lightObject().color, 1.0f };
+        lightUbo.sunlightDirection = glm::vec4 { sunlightShadow.lightObject().direction, 1.0f };
+        lightUbo.sunlightColor = glm::vec4 { sunlightShadow.lightObject().color, 1.0f };
 
         lightUbo.amountOfPointLights = static_cast<uint32_t>(pointLights.size());
         lightUbo.amountOfSpotLights = static_cast<uint32_t>(spotLights.size());
 
         for (size_t i = 0; i < pointLights.size(); i++) {
-            pointLights[i].position = glm::vec3(rotateLight * glm::vec4{ pointLights[i].position, 1.0f });
+            pointLights[i].position = glm::vec3(rotateLight * glm::vec4 { pointLights[i].position, 1.0f });
 
             lightUbo.pointLights[i].position = glm::vec4(pointLights[i].position, 0.1f);
             lightUbo.pointLights[i].color = glm::vec4(pointLights[i].color, pointLights[i].intensity);
@@ -294,7 +283,10 @@ namespace yorna {
         frameInfos[frameInfoIndex].lightBuffer->flush();
     }
 
-    void Yorna::createSamplers() {
+    // clang-format off
+
+    void Yorna::createSamplers()
+    {
         textureSampler = coffee::graphics::Sampler::create(device, {
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
@@ -304,7 +296,7 @@ namespace yorna {
             .compareOp = VK_COMPARE_OP_ALWAYS,
             .minLod = 0.0f,
             .maxLod = VK_LOD_CLAMP_NONE,
-            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK
+            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
         });
 
         outputSampler = coffee::graphics::Sampler::create(device, {
@@ -316,18 +308,19 @@ namespace yorna {
             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .minLod = 0.0f,
             .maxLod = 1.0f,
-            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE
+            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
         });
     }
 
-    void Yorna::createBuffers() {
+    void Yorna::createBuffers()
+    {
         for (auto& frameInfo : frameInfos) {
             frameInfo.mvpBuffer = coffee::graphics::Buffer::create(device, {
                 .instanceSize = sizeof(MVPUniformBuffer),
                 .instanceCount = 1U,
                 .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             });
 
             frameInfo.lightBuffer = coffee::graphics::Buffer::create(device, {
@@ -335,19 +328,21 @@ namespace yorna {
                 .instanceCount = 1U,
                 .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
             });
         }
     }
 
-    void Yorna::loadModels() {
-        sponzaModel = std::make_unique<Model>(device, assetManager->getModel(filesystem, "exterior.cfa"), textureSampler);
+    void Yorna::loadModels()
+    {
+        model = std::make_unique<Model>(device, assetManager->getModel(filesystem, "exterior.cfa"), textureSampler);
 
         viewerObject.translation.z = -1.5f;
         viewerObject.translation.y = 1.0f;
     }
 
-    void Yorna::createRenderPasses() {
+    void Yorna::createRenderPasses()
+    {
         earlyDepthPass = coffee::graphics::RenderPass::create(device, {
             .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
                 .format = device->optimalDepthFormat(),
@@ -356,8 +351,8 @@ namespace yorna {
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-            }
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            },
         });
 
         renderPass = coffee::graphics::RenderPass::create(device, {
@@ -368,7 +363,7 @@ namespace yorna {
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             }},
             .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
                 .format = device->optimalDepthFormat(),
@@ -377,16 +372,15 @@ namespace yorna {
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-            }
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+            },
         });
     }
 
-    void Yorna::createPipelines() {
+    void Yorna::createPipelines()
+    {
         earlyDepthPipeline = coffee::graphics::Pipeline::create(device, earlyDepthPass, {
-            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
-                assetManager->getShader(filesystem, "shaders/early_depth.vert.spv", VK_SHADER_STAGE_VERTEX_BIT)
-            }),
+            .vertexShader = assetManager->getShader(filesystem, "shaders/early_depth.vert.spv"),
             .layouts = {
                 gameLayout
             },
@@ -409,13 +403,11 @@ namespace yorna {
         });
 
         mainPipeline = coffee::graphics::Pipeline::create(device, renderPass, {
-            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
-                assetManager->getShader(filesystem, "shaders/forward.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-                assetManager->getShader(filesystem, "shaders/forward.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
-            }),
+            .vertexShader = assetManager->getShader(filesystem, "shaders/forward.vert.spv"),
+            .fragmentShader = assetManager->getShader(filesystem, "shaders/forward.frag.spv"),
             .layouts = {
                 gameLayout,
-                sponzaModel->layout
+                model->layout
             },
             .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0U,
@@ -432,14 +424,12 @@ namespace yorna {
             },
             .depthStencilInfo = {
                 .depthCompareOp = VK_COMPARE_OP_EQUAL
-            }
+            },
         });
 
         lightPointsPipeline = coffee::graphics::Pipeline::create(device, renderPass, {
-            .shaders = coffee::utils::moveList<coffee::graphics::ShaderPtr, std::vector<coffee::graphics::ShaderPtr>>({
-                assetManager->getShader(filesystem, "shaders/point_light.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-                assetManager->getShader(filesystem, "shaders/point_light.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
-            }),
+            .vertexShader = assetManager->getShader(filesystem, "shaders/point_light.vert.spv"),
+            .fragmentShader = assetManager->getShader(filesystem, "shaders/point_light.frag.spv"),
             .layouts = {
                 gameLayout
             },
@@ -452,19 +442,21 @@ namespace yorna {
             },
             .depthStencilInfo = {
                 .depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL
-            }
+            },
         });
     }
 
-    void Yorna::createImages() {
+    void Yorna::createImages()
+    {
         colorImage = coffee::graphics::Image::create(device, {
             .imageType = VK_IMAGE_TYPE_2D,
             .format = device->surfaceFormat(),
-            .extent = { 1920U, 1080U },
+            .extent = { 1920U, 1080U, },
             .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
             .allocationFlags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             .priority = 1.0f
         });
+
         colorImageView = coffee::graphics::ImageView::create(colorImage, {
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = device->surfaceFormat()
@@ -473,11 +465,12 @@ namespace yorna {
         depthImage = coffee::graphics::Image::create(device, {
             .imageType = VK_IMAGE_TYPE_2D,
             .format = device->optimalDepthFormat(),
-            .extent = { 1920U, 1080U },
+            .extent = { 1920U, 1080U, },
             .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
             .allocationFlags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
             .priority = 1.0f
         });
+
         depthImageView = coffee::graphics::ImageView::create(depthImage, {
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format = device->optimalDepthFormat(),
@@ -491,7 +484,8 @@ namespace yorna {
         });
     }
 
-    void Yorna::createFramebuffer() {
+    void Yorna::createFramebuffer()
+    {
         earlyDepthFramebuffer = coffee::graphics::Framebuffer::create(device, earlyDepthPass, {
             .extent = { depthImage->extent.width, depthImage->extent.height },
             .depthStencilView = depthImageView
@@ -504,48 +498,58 @@ namespace yorna {
         });
     }
 
-    void Yorna::updateDescriptors() {
-        outputSet->updateDescriptor(
-            coffee::graphics::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
+    // clang-format on
+
+    void Yorna::updateDescriptors()
+    {
+        coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter(outputLayout);
+
+        outputSet->updateDescriptor(writer.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
     }
 
-    void Yorna::createDescriptors() {
+    void Yorna::createDescriptors()
+    {
+        // clang-format off
         gameLayout = coffee::graphics::DescriptorLayout::create(device, {
-            { 0, {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 1, {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 2, {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
+            { 0, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
+            { 1, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT } },
+            { 2, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } },
         });
 
         outputLayout = coffee::graphics::DescriptorLayout::create(device, {
-            { 0, {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT } }
+            { 0, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } },
         });
+        // clang-format on
 
         for (auto& frameInfo : frameInfos) {
-            coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter(gameLayout)
-                .addBuffer(0, frameInfo.mvpBuffer)
-                .addBuffer(1, frameInfo.lightBuffer)
-                .addImage(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, sunlightShadow.depthMapView(), sunlightShadow.shadowSampler());
+            coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter(gameLayout);
+
+            writer.addBuffer(0, frameInfo.mvpBuffer);
+            writer.addBuffer(1, frameInfo.lightBuffer);
+            writer.addImage(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, sunlightShadow.mapView(), sunlightShadow.sampler());
 
             frameInfo.descriptorSet = coffee::graphics::DescriptorSet::create(device, writer);
         }
 
-        outputSet = coffee::graphics::DescriptorSet::create(device,
-            coffee::graphics::DescriptorWriter(outputLayout).addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
+        coffee::graphics::DescriptorWriter outputWriter = coffee::graphics::DescriptorWriter(outputLayout);
+        outputWriter.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler);
+
+        outputSet = coffee::graphics::DescriptorSet::create(device, outputWriter);
     }
 
-    void Yorna::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept {
+    void Yorna::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept
+    {
         if (window.cursorState() != coffee::graphics::CursorState::Disabled) {
             return;
         }
 
         coffee::Float2D mousePosition = window.mousePosition();
-        viewerObject.rotation.x =
-            glm::clamp(viewerObject.rotation.x + lookSpeed * (e.y - mousePosition.y), -1.5f, 1.5f);
-        viewerObject.rotation.y =
-            glm::mod(viewerObject.rotation.y + lookSpeed * (e.x - mousePosition.x), glm::two_pi<float>());
+        viewerObject.rotation.x = glm::clamp(viewerObject.rotation.x + lookSpeed * (e.y - mousePosition.y), -1.5f, 1.5f);
+        viewerObject.rotation.y = glm::mod(viewerObject.rotation.y + lookSpeed * (e.x - mousePosition.x), glm::two_pi<float>());
     }
 
-    void Yorna::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept {
+    void Yorna::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept
+    {
         switch (e.key) {
             case coffee::Keys::Escape:
                 window.showCursor();
@@ -562,4 +566,4 @@ namespace yorna {
         }
     };
 
-}
+} // namespace yorna

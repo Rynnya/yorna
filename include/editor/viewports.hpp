@@ -27,7 +27,8 @@ namespace yorna {
     };
 
     template <typename T, size_t Size>
-    static constexpr T calculateAverage(const T(&buffer)[Size]) {
+    static constexpr T calculateAverage(const T (&buffer)[Size])
+    {
         T result {};
 
         for (size_t i = 0; i < Size; i++) {
@@ -58,15 +59,7 @@ namespace yorna {
     };
 
     struct DirectoryObject {
-        enum class Type {
-            Unknown = 0,
-            Directory = 1,
-            Mesh = 2,
-            Texture = 3,
-            Shader = 4,
-            CompiledShader = 5,
-            Audio = 6
-        } type = Type::Unknown;
+        enum class Type { Unknown = 0, Directory = 1, Mesh = 2, Texture = 3, Shader = 4, CompiledShader = 5, Audio = 6 } type = Type::Unknown;
 
         std::filesystem::path relativePath {};
         std::u8string filename {};
@@ -80,6 +73,6 @@ namespace yorna {
         std::vector<DirectoryObject> content {};
     };
 
-}
+} // namespace yorna
 
 #endif
