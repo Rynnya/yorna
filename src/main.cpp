@@ -6,16 +6,19 @@
 
 #include <oneapi/tbb/task_group.h>
 
-int main() {
+int main()
+{
     auto gpuDevice = coffee::graphics::Device::create();
     auto loopHandler = coffee::LoopHandler::create();
 
-    auto window = coffee::graphics::Window::create(gpuDevice, {
-        .extent = { 1280, 720 },
+    const coffee::graphics::WindowSettings settings = {
+        .extent = { .width = 1280, .height = 720, },
         .presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR,
         .hiddenOnStart = true,
-        .fullscreen = false
-    });
+        .fullscreen = false,
+    };
+
+    auto window = coffee::graphics::Window::create(gpuDevice, settings);
 
     yorna::Yorna gameHandler { gpuDevice, loopHandler };
     yorna::Editor editor { gpuDevice, gameHandler };
@@ -25,7 +28,7 @@ int main() {
     auto gameThreadWork = [&gpuDevice, &gameHandler, &timestamps]() {
         yorna::ImGuiBackendPlatformData* platformData = static_cast<yorna::ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
         coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
- 
+
         timestamps.resetQueryPool(commandBuffer);
         gameHandler.bindWindow(platformData->fullControlWindowPtr);
         gameHandler.update();
