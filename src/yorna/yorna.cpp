@@ -8,7 +8,7 @@
 
 namespace yorna {
 
-    static constexpr std::array<VkClearValue, 2> normalClearValues = { VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } },
+    static constexpr std::array<VkClearValue, 2> normalClearValues = { VkClearValue { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
                                                                        VkClearValue { .depthStencil = { 0.0f, 0U } } };
 
     static constexpr std::array<VkClearValue, 1> depthClearValues = { VkClearValue { .depthStencil = { 0.0f, 0U } } };

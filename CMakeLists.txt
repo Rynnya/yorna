@@ -16,6 +16,11 @@ file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dial
 file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog_def.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog_def.h")
 execute_process(COMMAND cmd /C "cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch" OUTPUT_QUIET ERROR_QUIET)
 
+if(MSVC)
+    add_compile_options(/GR-)
+    add_compile_options(/EHa)
+endif()
+
 add_subdirectory(engine)
 add_subdirectory(libs/imgui)
 
@@ -45,7 +50,7 @@ add_custom_target(${SHADERS_PROJECT} DEPENDS ${DEPENDENCIES_SHADERS})
 add_dependencies(${PROJECT_NAME} ${SHADERS_PROJECT})
 list(APPEND SOURCES ${SHADERS_SOURCES})
 
-IF(MSVC)
+if(MSVC)
     set_target_properties(imgui glm PROPERTIES
         VS_GLOBAL_VcpkgEnabled FALSE
         FOLDER "coffee-editor-libs"

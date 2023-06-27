@@ -14,6 +14,25 @@ namespace yorna {
 
     Editor::Editor(const coffee::graphics::DevicePtr& device, yorna::Yorna& gameHandle) noexcept : device { device }, gameHandle { gameHandle }
     {
+        const VkPhysicalDeviceMemoryProperties* properties = device->memoryProperties();
+
+        for (uint32_t i = 0; i < properties->memoryTypeCount; i++) {
+            const VkMemoryType& memoryType = properties->memoryTypes[i];
+
+            bool isDeviceMemory = (memoryType.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0;
+            bool isHostMemory = (memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0;
+
+            if (isDeviceMemory && isHostMemory) {
+                sceneViewport.sharedHeapIndex = memoryType.heapIndex;
+            }
+            else if (isDeviceMemory) {
+                sceneViewport.deviceHeapIndex = memoryType.heapIndex;
+            }
+            else if (isHostMemory) {
+                sceneViewport.hostHeapIndex = memoryType.heapIndex;
+            }
+        }
+
         framebufferImage = gameHandle.outputSet;
 
         projectInformation.dialog.SetLocales(LC_ALL, "ru_RU.UTF-8", "C");
@@ -171,9 +190,7 @@ namespace yorna {
                 ImGui::SameLine();
                 ImGui::Checkbox(localizeName(LocaleName::DisplayFrametimeFPS), &sceneViewport.outputFramerateAndFPS);
 
-                ImGuiIO& io = ImGui::GetIO();
                 ImGuiViewport* viewport = ImGui::GetWindowViewport();
-
                 ImVec2 currentCursorPosition = ImGui::GetCursorScreenPos();
                 ImVec2 contentRegion = ImGui::GetContentRegionAvail();
 
@@ -307,6 +324,8 @@ namespace yorna {
                             case DirectoryObject::Type::Directory:
                                 assetBrowser.updateRequired = true;
                                 assetBrowser.currentFolder = assetBrowser.rootFolder / directoryObject.relativePath;
+                                break;
+                            default:
                                 break;
                         }
                     }

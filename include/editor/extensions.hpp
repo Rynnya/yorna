@@ -102,7 +102,6 @@ namespace ImGui {
         ImVec2 objectNameSize = CalcTextSize(textBeginPtr, textEndPtr, false, textWrapSize);
 
         PushStyleVar(ImGuiStyleVar_Alpha, 0.2f);
-        ImGuiSelectableFlags_;
         PushID(id);
         Selectable("", &selected, 0, { 96.0f, 75.0f + objectNameSize.y });
         PopID();

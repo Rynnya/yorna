@@ -2337,7 +2337,6 @@ namespace yorna {
 
         // Platform callbacks
         platformIO.Platform_CreateWindow = [](ImGuiViewport* viewport) {
-            ImGuiBackendPlatformData* backendPlatformData = static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
             ImGuiBackendRendererData* backendRendererData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
             ImGuiViewportData* viewportData = new ImGuiViewportData{
