@@ -1,7 +1,5 @@
 #version 450
 
-#extension GL_GOOGLE_include_directive : enable
-
 #include "light_objects.glsl"
 #include "materials.glsl"
 
@@ -28,20 +26,18 @@ layout (set = 0, binding = 0) uniform MVPUBO {
 layout (set = 0, binding = 1) uniform LightUBO {
     mat4 sunlightSpaceMatrix;
     vec4 sunlightDirection;
-    vec4 sunlightColor;
+    vec4 sunlightColor; // w is sunlightIntensity
     uint amountOfPointLights;
     uint amountOfSpotLights;
-    PointLight[MAX_AMOUNT_OF_POINT_LIGHTS] lightPoints;
-    SpotLight[MAX_AMOUNT_OF_SPOT_LIGHTS] spotLights;
+    PointLight lightPoints[MAX_AMOUNT_OF_POINT_LIGHTS];
+    SpotLight spotLights[MAX_AMOUNT_OF_SPOT_LIGHTS];
 } lightUbo;
 
 layout (set = 0, binding = 2) uniform sampler2D sunlightShadowMap;
 
 layout (set = 1, binding = 0) uniform MaterialsInfo {
-    vec3 diffuseColor;
-    float metallicFactor;
-    vec3 specularColor;
-    float roughnessFactor;
+    vec4 diffuseColor; // w is metallicFactor
+    vec4 specularColor; // w is roughnessFactor
     uint textureFlags;
 } materialsInformation;
 
@@ -203,8 +199,8 @@ void main() {
     vec3 diffuseColor = materialsInformation.diffuseColor.rgb;
     vec3 specularColor = materialsInformation.specularColor.rgb;
     vec3 surfaceNormal = vec3(0.0);
-    float metallic = materialsInformation.metallicFactor;
-    float roughness = materialsInformation.roughnessFactor;
+    float metallic = materialsInformation.diffuseColor.a;
+    float roughness = materialsInformation.specularColor.a;
     
     if ((materialsInformation.textureFlags & DIFFUSE_TEXTURE_BIT) != 0) {
         diffuseColor *= texture(textureDiffuse, fragTexCoords).rgb;

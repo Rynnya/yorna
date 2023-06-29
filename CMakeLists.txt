@@ -29,8 +29,10 @@ find_package(Vulkan)
 file(GLOB_RECURSE SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.glsl"
     "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.vert"
-    "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.frag")
+    "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.frag"
+    "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders/*.comp")
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -41,7 +43,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/nlohmann")
 target_link_libraries(${PROJECT_NAME} PRIVATE coffee-engine imgui)
 
-file(GLOB_RECURSE SHADERS_SOURCES "${SHADERS_FOLDER}/*.vert" "${SHADERS_FOLDER}/*.frag")
+file(GLOB_RECURSE SHADERS_SOURCES "${SHADERS_FOLDER}/*.vert" "${SHADERS_FOLDER}/*.frag" "${SHADERS_FOLDER}/*.comp")
 foreach(SOURCE IN ITEMS ${SHADERS_SOURCES})
     add_custom_command(OUTPUT "${SOURCE}.spv" COMMAND ${SHADERS_FOLDER}/compile_shader.bat "${SOURCE}" DEPENDS "${SOURCE}" VERBATIM)
     list(APPEND DEPENDENCIES_SHADERS "${SOURCE}.spv")

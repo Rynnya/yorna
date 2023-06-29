@@ -1,7 +1,6 @@
 #include <editor/imgui.hpp>
 
 #include <coffee/graphics/monitor.hpp>
-#include <coffee/graphics/single_time.hpp>
 #include <coffee/utils/utils.hpp>
 
 #include <imgui_internal.h>
@@ -2677,7 +2676,66 @@ namespace yorna {
         }
         stagingBuffer->unmap();
 
-        coffee::graphics::SingleTime::copyBufferToImage(device, backendData->fonts, stagingBuffer);
+        coffee::graphics::CommandBuffer transferCommandBuffer = coffee::graphics::CommandBuffer::createTransfer(device);
+        VkImageMemoryBarrier barrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        VkBufferImageCopy copyRegion {};
+
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = backendData->fonts->image();
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.layerCount = 1;
+        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &barrier);
+
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageExtent = backendData->fonts->extent;
+        transferCommandBuffer.copyBufferToImage(stagingBuffer, backendData->fonts, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = backendData->fonts->image();
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.layerCount = 1;
+        VkPipelineStageFlagBits useStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
+        if (!device->isUnifiedGraphicsTransferQueue()) {
+            barrier.dstAccessMask = 0;
+            barrier.srcQueueFamilyIndex = device->transferQueueFamilyIndex();
+            barrier.dstQueueFamilyIndex = device->graphicsQueueFamilyIndex();
+            useStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        }
+
+        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
+        device->singleTimeOperation(std::move(transferCommandBuffer));
+
+        if (!device->isUnifiedGraphicsTransferQueue()) {
+            coffee::graphics::CommandBuffer ownershipCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(device);
+
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcQueueFamilyIndex = device->transferQueueFamilyIndex();
+            barrier.dstQueueFamilyIndex = device->graphicsQueueFamilyIndex();
+            barrier.image = backendData->fonts->image();
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier.subresourceRange.levelCount = 1;
+            barrier.subresourceRange.layerCount = 1;
+
+            ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
+            device->singleTimeOperation(std::move(ownershipCommandBuffer));
+        }
 
         backendData->fontsView = coffee::graphics::ImageView::create(backendData->fonts, {
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
@@ -2689,6 +2747,8 @@ namespace yorna {
                 .a = VK_COMPONENT_SWIZZLE_R
             }
         });
+
+        device->waitDeviceIdle();
     }
 
     void ImGuiImplementation::createDescriptors()

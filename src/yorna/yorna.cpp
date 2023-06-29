@@ -337,6 +337,8 @@ namespace yorna {
     {
         model = std::make_unique<Model>(device, assetManager->getModel(filesystem, "exterior.cfa"), textureSampler);
 
+        device->waitGraphicsQueueIdle();
+
         viewerObject.translation.z = -1.5f;
         viewerObject.translation.y = 1.0f;
     }

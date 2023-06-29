@@ -1,0 +1,39 @@
+#version 450
+
+#include "frustum.glsl"
+
+layout (local_size_x = FRUSTUM_BLOCK_SIZE, local_size_y = FRUSTUM_BLOCK_SIZE, local_size_z = 1) in;
+
+layout (std430, binding = 0, set = 0) writeonly buffer OutputFrustums { Frustum outFrustums[]; };
+
+layout (push_constant) uniform Push {
+    mat4 inverseProjection;
+    vec2 screenDimensions;
+} push;
+
+void main() {
+    const vec3 eyePosition = vec3(0, 0, 0);
+
+    vec4 screenSpace[4];
+    vec3 viewSpace[4];
+    Frustum frustum;
+
+    screenSpace[0] = vec4(gl_GlobalInvocationID.xy * FRUSTUM_BLOCK_SIZE, -1.0, 1.0);
+    screenSpace[1] = vec4(vec2(gl_GlobalInvocationID.x + 1, gl_GlobalInvocationID.y) * FRUSTUM_BLOCK_SIZE, -1.0, 1.0);
+    screenSpace[2] = vec4(vec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y + 1) * FRUSTUM_BLOCK_SIZE, -1.0, 1.0);
+    screenSpace[3] = vec4(vec2(gl_GlobalInvocationID.x + 1, gl_GlobalInvocationID.y + 1) * FRUSTUM_BLOCK_SIZE, -1.0, 1.0);
+
+    for (int i = 0; i < 4; i++) {
+        viewSpace[i] = screenToView(push.inverseProjection, push.screenDimensions, screenSpace[i]).xyz;
+    }
+    
+    frustum.planes[0] = computePlane(eyePosition, viewSpace[2], viewSpace[0]);
+    frustum.planes[1] = computePlane(eyePosition, viewSpace[1], viewSpace[3]);
+    frustum.planes[2] = computePlane(eyePosition, viewSpace[0], viewSpace[1]);
+    frustum.planes[3] = computePlane(eyePosition, viewSpace[3], viewSpace[2]);
+
+    if (gl_GlobalInvocationID.x < gl_WorkGroupSize.x && gl_GlobalInvocationID.y < gl_WorkGroupSize.y) {
+        uint index = gl_GlobalInvocationID.x + (gl_GlobalInvocationID.y * gl_WorkGroupSize.x);
+        outFrustums[index] = frustum;
+    }
+}
