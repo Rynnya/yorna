@@ -4,11 +4,9 @@ bin/
 build/
 
 # Native filesystem files, except for source code shaders
-nativefs/
-!nativefs/shaders/*.vert
-!nativefs/shaders/*.frag
-!nativefs/shaders/*.comp
-!nativefs/shaders/*.glsl
+!nativefs/
+nativefs/*
+!nativefs/shaders/
 
 # Precomputed filesystems (which weight a lot)
 *.fs

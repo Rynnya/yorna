@@ -40,17 +40,17 @@ namespace yorna {
         createSyncObjects();
         loadModels();
 
-        //auto* pointLightsPtr = pointLights->memory<PointLight*>();
+        auto* pointLightsPtr = pointLights->memory<PointLight*>();
 
-        //for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
-        //    pointLightsPtr[index] = {
-        //        .position = glm::linearRand(glm::vec3 { -15.0f, -5.0f, -5.0f }, glm::vec3 { 15.0f, 20.0f, 5.0f }),
-        //        .radius = 2.0f,
-        //        .color = glm::linearRand(glm::vec3 { 0.5f }, glm::vec3 { 1.0f }),
-        //    };
-        //}
+        for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
+            pointLightsPtr[index] = {
+                .position = glm::linearRand(glm::vec3 { -15.0f, -5.0f, -5.0f }, glm::vec3 { 15.0f, 20.0f, 5.0f }),
+                .radius = 2.0f,
+                .color = glm::linearRand(glm::vec3 { 0.5f }, glm::vec3 { 1.0f }),
+            };
+        }
 
-        //pointLights->flush();
+        pointLights->flush();
 
         //auto* spotLightsPtr = spotLights->memory<SpotLight*>();
 
