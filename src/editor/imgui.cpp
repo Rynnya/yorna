@@ -8,7 +8,7 @@
 namespace yorna {
 
     constexpr std::array<VkClearValue, 1> clearValues = { VkClearValue { .color = { 0.0f, 0.0f, 0.0f, 1.0f } } };
-    constexpr VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    constexpr VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
     // clang-format off
 
@@ -2215,8 +2215,8 @@ namespace yorna {
             commandBuffer.bindIndexBuffer(indexBuffer);
         }
 
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, backendData->descriptorSet);
+        commandBuffer.bindPipeline(backendData->pipeline);
+        commandBuffer.bindDescriptorSets(backendData->pipeline, backendData->descriptorSet);
         commandBuffer.setViewport({ .width = framebufferWidth, .height = framebufferHeight, .minDepth = 0.0f, .maxDepth = 1.0f });
 
         ImGuiPushConstant constants {};
@@ -2257,11 +2257,9 @@ namespace yorna {
                 }
 
                 if (command.TextureId != nullptr) {
-                    commandBuffer.bindDescriptorSets(
-                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        backendData->pipeline,
-                        *reinterpret_cast<const coffee::graphics::DescriptorSetPtr*>(command.TextureId)
-                    );
+                    const coffee::graphics::DescriptorSetPtr& descriptor =
+                        *reinterpret_cast<const coffee::graphics::DescriptorSetPtr*>(command.TextureId);
+                    commandBuffer.bindDescriptorSets(backendData->pipeline, descriptor);
                 }
 
                 commandBuffer.setScissor({
@@ -2278,7 +2276,7 @@ namespace yorna {
 
                 // We must restore default descriptor set
                 if (command.TextureId != nullptr) {
-                    commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, backendData->pipeline, backendData->descriptorSet);
+                    commandBuffer.bindDescriptorSets(backendData->pipeline, backendData->descriptorSet);
                 }
             }
 
@@ -2717,7 +2715,7 @@ namespace yorna {
         }
 
         transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        device->singleTimeOperation(std::move(transferCommandBuffer));
+        device->submit(std::move(transferCommandBuffer));
 
         if (!device->isUnifiedGraphicsTransferQueue()) {
             coffee::graphics::CommandBuffer ownershipCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(device);
@@ -2734,7 +2732,7 @@ namespace yorna {
             barrier.subresourceRange.layerCount = 1;
 
             ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
-            device->singleTimeOperation(std::move(ownershipCommandBuffer));
+            device->submit(std::move(ownershipCommandBuffer));
         }
 
         backendData->fontsView = coffee::graphics::ImageView::create(backendData->fonts, {
@@ -2786,9 +2784,12 @@ namespace yorna {
     {
         ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
-        backendData->pipeline = coffee::graphics::Pipeline::create(device, backendData->renderPass, {
+        backendData->pipeline = coffee::graphics::GraphicsPipeline::create(device, backendData->renderPass, {
             .vertexShader = coffee::graphics::ShaderModule::create(device, imguiVertexShader),
             .fragmentShader = coffee::graphics::ShaderModule::create(device, imguiFragmentShader),
+            .vertexPushConstants = {
+                .size = sizeof(ImGuiPushConstant)
+            },
             .layouts = {
                 backendData->layout
             },
@@ -2801,10 +2802,6 @@ namespace yorna {
                     coffee::graphics::InputElement { .location = 1U, .format = VK_FORMAT_R32G32_SFLOAT, .offset = offsetof(ImDrawVert, uv) },
                     coffee::graphics::InputElement { .location = 2U, .format = VK_FORMAT_R8G8B8A8_UNORM, .offset = offsetof(ImDrawVert, col) }
                 }
-            }},
-            .constantRanges = { coffee::graphics::PushConstantRange {
-                .stages = VK_SHADER_STAGE_VERTEX_BIT,
-                .size = static_cast<uint32_t>(sizeof(ImGuiPushConstant))
             }},
             .rasterizationInfo = {
                 .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE

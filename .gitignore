@@ -1,8 +1,17 @@
+# Visual Studio and Build folder for CMake
 .vs/
 bin/
 build/
-shaders/*.vert.spv
-shaders/*.frag.spv
+
+# Native filesystem files, except for source code shaders
+nativefs/
+!nativefs/shaders/*.vert
+!nativefs/shaders/*.frag
+!nativefs/shaders/*.comp
+!nativefs/shaders/*.glsl
+
+# Precomputed filesystems (which weight a lot)
+*.fs
+
+# ImGui settings
 imgui.ini
-amazon.fs
-sponza.fs

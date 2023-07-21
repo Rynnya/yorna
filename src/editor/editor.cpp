@@ -33,11 +33,11 @@ namespace yorna {
             }
         }
 
-        framebufferImage = gameHandle.outputSet;
-
         projectInformation.dialog.SetLocales(LC_ALL, "ru_RU.UTF-8", "C");
-    }
 
+        framebufferImage = gameHandle.outputDescriptor;
+    }
+    
     void Editor::render()
     {
         ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
@@ -168,7 +168,9 @@ namespace yorna {
 
                         sceneHierarchy.components.emplace<EntityRoot>(entity);
 
-                        auto& spotLight = sceneHierarchy.components.emplace<SpotLight>(entity, 30.0f, gameHandle.viewerObject.rotation);
+                        auto& spotLight = sceneHierarchy.components.emplace<SpotLight>(entity);
+                        spotLight.coneDirection = gameHandle.viewerObject.rotation;
+                        spotLight.coneAngle = glm::radians(30.0f);
                         spotLight.position = gameHandle.viewerObject.translation;
                     }
 
@@ -240,6 +242,11 @@ namespace yorna {
                     std::string depthPass = std::format("Depth pass: {:.6f} ms", calculateAverage(sceneViewport.averageDepthPass));
                     ImGui::GetWindowDrawList()
                         ->AddText(textPosition, IM_COL32(0, 255, 0, 255), depthPass.data(), depthPass.data() + depthPass.size());
+
+                    textPosition.y += 15;
+                    std::string lightPass = std::format("Light pass: {:.6f} ms", calculateAverage(sceneViewport.averageLightPass));
+                    ImGui::GetWindowDrawList()
+                        ->AddText(textPosition, IM_COL32(0, 255, 0, 255), lightPass.data(), lightPass.data() + lightPass.size());
 
                     textPosition.y += 15;
                     std::string rendering = std::format("Rendering: {:.6f} ms", calculateAverage(sceneViewport.averageRendering));
@@ -374,7 +381,8 @@ namespace yorna {
 
         if (gpuTimings.back() > 0) {
             sceneViewport.averageDepthPass[sceneViewport.statisticIndex] = gpuTimings[0];
-            sceneViewport.averageRendering[sceneViewport.statisticIndex] = gpuTimings[1];
+            sceneViewport.averageLightPass[sceneViewport.statisticIndex] = gpuTimings[1];
+            sceneViewport.averageRendering[sceneViewport.statisticIndex] = gpuTimings[2];
         }
 
         sceneViewport.statisticIndex = (sceneViewport.statisticIndex + 1) % SceneViewport::kAverageStatisticBufferSize;
@@ -548,7 +556,9 @@ namespace yorna {
                         previousChildHierarchyComponent->previous = child;
                     }
 
-                    auto& spotLight = sceneHierarchy.components.emplace<SpotLight>(entity, 30.0f, gameHandle.viewerObject.rotation);
+                    auto& spotLight = sceneHierarchy.components.emplace<SpotLight>(entity);
+                    spotLight.coneDirection = gameHandle.viewerObject.rotation;
+                    spotLight.coneAngle = glm::radians(30.0f);
                     spotLight.position = gameHandle.viewerObject.translation;
                 }
 

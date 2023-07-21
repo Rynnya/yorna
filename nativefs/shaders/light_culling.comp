@@ -8,19 +8,24 @@ layout (constant_id = 1) const uint MAX_AMOUNT_OF_SPOT_LIGHTS = 32;
 
 layout (local_size_x = FRUSTUM_BLOCK_SIZE, local_size_y = FRUSTUM_BLOCK_SIZE, local_size_z = 1) in;
 
-layout (set = 0, binding = 0, r32f) uniform readonly image2D depthTexture;
-layout (std430, set = 0, binding = 1) readonly buffer InputFrustums { Frustum inFrustums[]; };
+layout (set = 0, binding = 0) uniform sampler2D depthTexture;
+layout (set = 0, binding = 1, std430) readonly buffer InputFrustums { Frustum inFrustums[]; };
+layout (set = 0, binding = 2) uniform InputPointLights { PointLight pointLights[MAX_AMOUNT_OF_POINT_LIGHTS]; };
+layout (set = 0, binding = 3) uniform InputSpotLights { SpotLight spotLights[MAX_AMOUNT_OF_SPOT_LIGHTS]; };
 
-layout (set = 0, binding = 2) uniform PointLightsUBO { PointLight lights[MAX_AMOUNT_OF_POINT_LIGHTS]; } pointLightUbo;
-layout (set = 0, binding = 3) uniform SpotLightsUBO { SpotLight lights[MAX_AMOUNT_OF_SPOT_LIGHTS]; } spotLightUbo;
+layout (set = 0, binding = 4) writeonly buffer OutputIndexCounters {
+    uint pointLightIndexCounter;
+    uint spotLightIndexCounter;
+};
 
-layout (set = 0, binding = 4) writeonly buffer OutputPointLightIndices { uint pointLightIndexCounter[]; };
-layout (set = 0, binding = 5) writeonly buffer OutputSpotLightIndices { uint spotLightIndexCounter[]; };
-layout (set = 0, binding = 6, rg32ui) uniform writeonly uimage2D pointLightGrid;
-layout (set = 0, binding = 7, rg32ui) uniform writeonly uimage2D spotLightGrid;
+layout (set = 0, binding = 5) writeonly buffer OutputPointLightIndexList { uint pointLightIndexList[]; };
+layout (set = 0, binding = 6) writeonly buffer OutputSpotLightIndexList { uint spotLightIndexList[]; };
+layout (set = 0, binding = 7, rg32ui) uniform writeonly uimage2D pointLightGrid;
+layout (set = 0, binding = 8, rg32ui) uniform writeonly uimage2D spotLightGrid;
 
 layout (push_constant) uniform Push {
     mat4 inverseProjection;
+    mat4 viewMatrix;
 } push;
 
 shared uint gMinDepth;
@@ -52,24 +57,23 @@ void appendOpaqueSpotLight(uint lightIndex) {
 }
 
 void main() {
-    float floatDepth = imageLoad(depthTexture, ivec2(gl_GlobalInvocationID.xy)).r;
+    float floatDepth = texelFetch(depthTexture, ivec2(gl_GlobalInvocationID.xy), 0).r;
     uint unsignedDepth = floatBitsToUint(floatDepth);
 
     if (gl_LocalInvocationIndex == 0) {
-        gMinDepth = 0xFFFFFFFF;
+        gMinDepth = 0x7F7FFFFF;
         gMaxDepth = 0;
         gOpaquePointLightCount = 0;
         gOpaqueSpotLightCount = 0;
-        gGroupFrustum = inFrustums[gl_WorkGroupID.x + (gl_WorkGroupID.y * gl_NumWorkGroups.x)];
+        gGroupFrustum = inFrustums[gl_WorkGroupID.x + gl_WorkGroupID.y * gl_NumWorkGroups.x];
     }
 
-    groupMemoryBarrier();
     barrier();
 
+    // float atomicMin and atomicMax requires shader_atomic_float2 extension
     atomicMin(gMinDepth, unsignedDepth);
     atomicMax(gMaxDepth, unsignedDepth);
 
-    groupMemoryBarrier();
     barrier();
 
     float minDepth = uintBitsToFloat(gMinDepth);
@@ -79,56 +83,63 @@ void main() {
     float maxDepthViewSpace = clipToView(push.inverseProjection, vec4(0.0, 0.0, maxDepth, 1.0)).z;
     float nearClipViewSpace = clipToView(push.inverseProjection, vec4(0.0, 0.0, 0.0, 1.0)).z;
 
-    Plane minPlane = { vec4(0.0, 0.0, -1.0, -minDepthViewSpace) };
+    Plane minPlane = { vec3(0.0, 0.0, -1.0), -minDepthViewSpace };
 
     for (uint i = gl_LocalInvocationIndex; i < MAX_AMOUNT_OF_POINT_LIGHTS; i += FRUSTUM_BLOCK_SIZE * FRUSTUM_BLOCK_SIZE) {
-        PointLight light = pointLightUbo.lights[i];
+        PointLight light = pointLights[i];
 
-        Sphere sphere = { light.position };
+        // Check if radius is larger than 0, otherwise discard
+        if (light.radius > 0.0) {
+            vec3 positionViewSpace = vec3(push.viewMatrix * vec4(light.position, 1.0));
+            Sphere sphere = { positionViewSpace, light.radius };
 
-        if (sphereInsideFrustum(gGroupFrustum, sphere, nearClipViewSpace, maxDepthViewSpace)) {
-            // appendTransparentPointLight(i);
+            if (sphereInsideFrustum(gGroupFrustum, sphere, nearClipViewSpace, maxDepthViewSpace)) {
+                // appendTransparentPointLight(i);
 
-            if (!sphereInsidePlane(minPlane, sphere)) {
-                appendOpaquePointLight(i);
+                if (!sphereInsidePlane(minPlane, sphere)) {
+                    appendOpaquePointLight(i);
+                }
             }
         }
     }
 
     for (uint i = gl_LocalInvocationIndex; i < MAX_AMOUNT_OF_SPOT_LIGHTS; i += FRUSTUM_BLOCK_SIZE * FRUSTUM_BLOCK_SIZE) {
-        SpotLight light = spotLightUbo.lights[i];
+        SpotLight light = spotLights[i];
 
-        float coneRadius = tan(radians(light.coneDirection.w)) * light.position.w;
-        Cone cone = { light.position, vec4(light.coneDirection.xyz, coneRadius) };
+        // Check if radius is larger than 0, otherwise discard
+        if (light.radius > 0.0) {
+            vec3 positionViewSpace = vec3(push.viewMatrix * vec4(light.position, 1.0));
+            vec3 directionViewSpace = vec3(push.viewMatrix * vec4(normalize(light.coneDirection), 0.0));
+            float coneRadius = tan(radians(light.coneAngle)) * light.radius;
+            Cone cone = { positionViewSpace, light.radius, directionViewSpace, coneRadius };
 
-        if (coneInsideFrustum(gGroupFrustum, cone, nearClipViewSpace, maxDepthViewSpace)) {
-            // appendTransparentPointLight(i);
+            if (coneInsideFrustum(gGroupFrustum, cone, nearClipViewSpace, maxDepthViewSpace)) {
+                // appendTransparentSpotLight(i);
 
-            if (!coneInsidePlane(minPlane, cone)) {
-                appendOpaqueSpotLight(i);
+                if (!coneInsidePlane(minPlane, cone)) {
+                    appendOpaqueSpotLight(i);
+                }
             }
         }
     }
 
-    groupMemoryBarrier();
     barrier();
 
     if (gl_LocalInvocationIndex == 0) {
-        gOpaquePointLightStartOffset = atomicAdd(pointLightIndexCounter[0], gOpaquePointLightCount);
+        gOpaquePointLightStartOffset = atomicAdd(pointLightIndexCounter, gOpaquePointLightCount);
         imageStore(pointLightGrid, ivec2(gl_WorkGroupID.xy), uvec4(gOpaquePointLightStartOffset, gOpaquePointLightCount, 0, 0));
 
-        gOpaqueSpotLightStartOffset = atomicAdd(spotLightIndexCounter[0], gOpaqueSpotLightCount);
+        gOpaqueSpotLightStartOffset = atomicAdd(spotLightIndexCounter, gOpaqueSpotLightCount);
         imageStore(spotLightGrid, ivec2(gl_WorkGroupID.xy), uvec4(gOpaqueSpotLightStartOffset, gOpaqueSpotLightCount, 0, 0));
     }
 
-    groupMemoryBarrier();
     barrier();
 
-    for (uint i = gl_LocalInvocationIndex; i < MAX_AMOUNT_OF_POINT_LIGHTS; i += FRUSTUM_BLOCK_SIZE * FRUSTUM_BLOCK_SIZE) {
-        pointLightIndexCounter[gOpaquePointLightStartOffset + i] = gOpaquePointLightList[i];
+    for (uint i = gl_LocalInvocationIndex; i < gOpaquePointLightCount; i += FRUSTUM_BLOCK_SIZE * FRUSTUM_BLOCK_SIZE) {
+        pointLightIndexList[gOpaquePointLightStartOffset + i] = gOpaquePointLightList[i];
     }
 
-    for (uint i = gl_LocalInvocationIndex; i < MAX_AMOUNT_OF_SPOT_LIGHTS; i += FRUSTUM_BLOCK_SIZE * FRUSTUM_BLOCK_SIZE) {
-        spotLightIndexCounter[gOpaqueSpotLightStartOffset + i] = gOpaqueSpotLightList[i];
+    for (uint i = gl_LocalInvocationIndex; i < gOpaqueSpotLightCount; i += FRUSTUM_BLOCK_SIZE * FRUSTUM_BLOCK_SIZE) {
+        spotLightIndexList[gOpaqueSpotLightStartOffset + i] = gOpaqueSpotLightList[i];
     }
 }

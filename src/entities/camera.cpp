@@ -2,6 +2,7 @@
 
 #include <coffee/utils/log.hpp>
 
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/scalar_constants.hpp>
 
 namespace yorna {
@@ -19,14 +20,14 @@ namespace yorna {
 
     void Camera::setPerspectiveProjection(float fovy, float aspect, float near, float far)
     {
-        if (glm::abs(aspect - std::numeric_limits<float>::epsilon()) <= 0.0f) {
+        if (glm::abs(aspect - glm::epsilon<float>()) <= 0.0f) {
             return;
         }
 
-        const float tanHalfFovy = tanf(fovy / 2.0f);
+        const float tanHalfFovy = glm::tan(fovy / 2.0f);
         projectionMatrix_ = glm::mat4 { 0.0f };
         projectionMatrix_[0][0] = 1.0f / (aspect * tanHalfFovy);
-        projectionMatrix_[1][1] = -1.0f / (tanHalfFovy);
+        projectionMatrix_[1][1] = -1.0f / tanHalfFovy;
         projectionMatrix_[2][2] = far / (far - near);
         projectionMatrix_[2][3] = 1.0f;
         projectionMatrix_[3][2] = -(far * near) / (far - near);
@@ -34,11 +35,11 @@ namespace yorna {
 
     void Camera::setReversePerspectiveProjection(float fovy, float aspect, float near)
     {
-        if (glm::abs(aspect - std::numeric_limits<float>::epsilon()) <= 0.0f) {
+        if (glm::abs(aspect - glm::epsilon<float>()) <= 0.0f) {
             return;
         }
 
-        const float reverseTanHalfFovy = 1.0f / tanf(fovy / 2.0f);
+        const float reverseTanHalfFovy = 1.0f / glm::tan(fovy / 2.0f);
         projectionMatrix_ = glm::mat4 { 0.0f };
         projectionMatrix_[0][0] = reverseTanHalfFovy / aspect;
         projectionMatrix_[1][1] = -reverseTanHalfFovy;
@@ -83,10 +84,7 @@ namespace yorna {
 
     void Camera::setViewTarget(const glm::vec3& position, const glm::vec3& target, const glm::vec3& up)
     {
-        COFFEE_ASSERT(
-            glm::distance(target, position) - std::numeric_limits<float>::epsilon() > 0,
-            "Distance between target and position must be more than 0."
-        );
+        COFFEE_ASSERT(glm::distance(target, position) - glm::epsilon<float>() > 0, "Distance between target and position must be more than 0.");
 
         setViewDirection(position, target - position, up);
     }
@@ -198,5 +196,7 @@ namespace yorna {
     const glm::mat4& Camera::view() const noexcept { return viewMatrix_; }
 
     const glm::mat4& Camera::inverseView() const noexcept { return inverseViewMatrix_; }
+
+    glm::mat4 Camera::computeInverseProjection() const noexcept { return glm::inverse(projectionMatrix_); }
 
 } // namespace yorna

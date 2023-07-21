@@ -21,6 +21,9 @@ if(MSVC)
     add_compile_options(/EHa)
 endif()
 
+add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
+add_compile_definitions(GLM_FORCE_LEFT_HANDED)
+
 add_subdirectory(engine)
 add_subdirectory(libs/imgui)
 

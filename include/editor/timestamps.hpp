@@ -16,6 +16,9 @@ namespace yorna {
         void writeBeginTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index);
         void writeEndTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index);
 
+        void enable();
+        void disable();
+
         std::vector<float> extractResults();
         float extractResults(uint32_t index);
 
@@ -26,6 +29,8 @@ namespace yorna {
         uint32_t amountOfTimestamps_ {};
         std::vector<uint32_t> writtenBeginIndices_ {};
         std::vector<uint32_t> writtenEndIndices_ {};
+
+        bool enabled_ = true;
     };
 
 } // namespace yorna

@@ -9,44 +9,53 @@
 int main()
 {
     auto gpuDevice = coffee::graphics::Device::create();
-    auto loopHandler = coffee::LoopHandler::create();
+    yorna::SharedInstance sharedInstance { gpuDevice };
 
-    const coffee::graphics::WindowSettings settings = {
+    auto loopHandler = coffee::LoopHandler::create();
+    auto window = coffee::graphics::Window::create(gpuDevice, {
         .extent = { .width = 1280, .height = 720, },
-        .presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR,
+        .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
         .hiddenOnStart = true,
         .fullscreen = false,
-    };
+    });
 
-    auto window = coffee::graphics::Window::create(gpuDevice, settings);
-
-    yorna::Yorna gameHandler { gpuDevice, loopHandler };
+    yorna::Yorna gameHandler { sharedInstance, loopHandler };
     yorna::Editor editor { gpuDevice, gameHandler };
     yorna::ImGuiImplementation imguiHandler { gpuDevice, window };
-    yorna::QueryTimestamps timestamps { gpuDevice, 2 };
+    yorna::QueryTimestamps timestamps { gpuDevice, 3 };
 
     auto gameThreadWork = [&gpuDevice, &gameHandler, &timestamps]() {
         yorna::ImGuiBackendPlatformData* platformData = static_cast<yorna::ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
-        coffee::graphics::CommandBuffer commandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
 
-        timestamps.resetQueryPool(commandBuffer);
+        auto earlyDepthCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
+        auto lightCullingCommandBuffer = coffee::graphics::CommandBuffer::createCompute(gpuDevice);
+        auto renderingCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
+
+        timestamps.resetQueryPool(earlyDepthCommandBuffer);
         gameHandler.bindWindow(platformData->fullControlWindowPtr);
         gameHandler.update();
 
-        timestamps.writeBeginTimestamp(commandBuffer, 0);
-        gameHandler.performDepthTest(commandBuffer);
-        timestamps.writeEndTimestamp(commandBuffer, 0);
+        timestamps.writeBeginTimestamp(earlyDepthCommandBuffer, 0);
+        gameHandler.performDepthTest(earlyDepthCommandBuffer);
+        timestamps.writeEndTimestamp(earlyDepthCommandBuffer, 0);
+        gameHandler.submitDepthTest(std::move(earlyDepthCommandBuffer));
 
-        timestamps.writeBeginTimestamp(commandBuffer, 1);
-        gameHandler.performRendering(commandBuffer);
-        timestamps.writeEndTimestamp(commandBuffer, 1);
+        timestamps.writeBeginTimestamp(lightCullingCommandBuffer, 1);
+        gameHandler.performLightCulling(lightCullingCommandBuffer);
+        timestamps.writeEndTimestamp(lightCullingCommandBuffer, 1);
+        gameHandler.submitLightCulling(std::move(lightCullingCommandBuffer));
 
-        gpuDevice->sendCommandBuffer(std::move(commandBuffer));
+        timestamps.writeBeginTimestamp(renderingCommandBuffer, 2);
+        gameHandler.performRendering(renderingCommandBuffer);
+        timestamps.writeEndTimestamp(renderingCommandBuffer, 2);
+        gameHandler.submitRendering(std::move(renderingCommandBuffer));
+
+        gameHandler.nextFrame();
     };
 
     tbb::task_group gameLoopTask {};
 
-    loopHandler.setFramerateLimit(1440.0f);
+    loopHandler.setFramerateLimit(1400.0f);
     window->showWindow();
 
     while (!window->shouldClose()) {
@@ -67,7 +76,7 @@ int main()
         auto imGuiTime = std::chrono::duration<float, std::milli>(std::chrono::high_resolution_clock::now() - loopBeginTime).count();
 
         gameLoopTask.wait();
-        gpuDevice->submitPendingWork();
+        gpuDevice->present();
 
         editor.updateAverageTimings(deltaTime, imGuiTime, timestamps);
 

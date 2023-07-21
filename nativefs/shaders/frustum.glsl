@@ -1,10 +1,12 @@
 #ifndef FRUSTUM_GLSL
 #define FRUSTUM_GLSL
 
+// Setting anything else will cause culling to go crazy for some reason
 const uint FRUSTUM_BLOCK_SIZE = 16;
 
 struct Plane {
-    vec4 normalDistance;
+    vec3 normal;
+    float dist;
 };
 
 // Order are following:
@@ -17,12 +19,15 @@ struct Frustum {
 };
 
 struct Sphere {
-    vec4 centerRadius;
+    vec3 center;
+    float radius;
 };
 
 struct Cone {
-    vec4 tipHeight;
-    vec4 directionRadius;
+    vec3 tip;
+    float height;
+    vec3 direction;
+    float radius;
 };
 
 Plane computePlane(vec3 p0, vec3 p1, vec3 p2) {
@@ -31,8 +36,8 @@ Plane computePlane(vec3 p0, vec3 p1, vec3 p2) {
     vec3 v0 = p1 - p0;
     vec3 v2 = p2 - p0;
 
-    plane.normalDistance.xyz = normalize(cross(v0, v2));
-    plane.normalDistance.w = dot(plane.normalDistance.xyz, p0);
+    plane.normal = normalize(cross(v0, v2));
+    plane.dist = dot(plane.normal, p0);
 
     return plane;
 }
@@ -43,38 +48,36 @@ vec4 clipToView(mat4 inverseProjection, vec4 clip) {
     return view;
 }
 
-vec4 screenToView(mat4 inverseProjection, vec2 screenDimensions, vec4 screen) {
-    vec2 texCoords = screen.xy / screenDimensions;
-    vec4 clip = vec4(vec2(texCoords.x, 1.0 - texCoords.y) * 2.0 - 1.0, screen.z, screen.w);
+vec4 screenToView(mat4 inverseProjection, vec2 screenDimensions, vec4 screenSpace) {
+    vec2 texCoords = screenSpace.xy / screenDimensions;
+    vec4 clip = vec4(texCoords * 2.0 - 1.0, screenSpace.z, screenSpace.w);
     return clipToView(inverseProjection, clip);
 }
 
 bool pointInsidePlane(Plane plane, vec3 point) {
-    return dot(plane.normalDistance.xyz, point) - plane.normalDistance.w < 0;
+    return dot(plane.normal, point) - plane.dist < 0.0;
 }
 
 bool sphereInsidePlane(Plane plane, Sphere sphere) {
-    return dot(plane.normalDistance.xyz, sphere.centerRadius.xyz) - plane.normalDistance.w < -sphere.centerRadius.w;
+    return dot(plane.normal, sphere.center) - plane.dist < -sphere.radius;
 }
 
 bool coneInsidePlane(Plane plane, Cone cone) {
-    vec3 parallel = cross(cross(plane.normalDistance.xyz, cone.directionRadius.xyz), cone.directionRadius.xyz);
-    vec3 farthest = cone.tipHeight.xyz + cone.directionRadius.xyz * cone.directionRadius.w - parallel * cone.directionRadius.w;
+    vec3 furthestPointDirection = cross(cross(plane.normal, cone.direction), cone.direction);
+    vec3 furthestPointOnCircle = cone.tip + cone.direction * cone.height - furthestPointDirection * cone.radius;
 
-    return pointInsidePlane(plane, cone.tipHeight.xyz) && pointInsidePlane(plane, farthest);
+    return pointInsidePlane(plane, cone.tip) && pointInsidePlane(plane, furthestPointOnCircle);
 }
 
 bool sphereInsideFrustum(Frustum frustum, Sphere sphere, float zNear, float zFar) {
     bool result = true;
 
-    if (sphere.centerRadius.z - sphere.centerRadius.w > zNear || sphere.centerRadius.z + sphere.centerRadius.w < zFar) {
+    if (sphere.center.z - sphere.radius > zNear || sphere.center.z + sphere.radius < zFar) {
         result = false;
     }
 
     for (int i = 0; i < 4 && result; i++) {
-        if (sphereInsidePlane(frustum.planes[i], sphere)) {
-            result = false;
-        }
+        result = !sphereInsidePlane(frustum.planes[i], sphere);
     }
 
     return result;
@@ -83,17 +86,15 @@ bool sphereInsideFrustum(Frustum frustum, Sphere sphere, float zNear, float zFar
 bool coneInsideFrustum(Frustum frustum, Cone cone, float zNear, float zFar) {
     bool result = true;
 
-    Plane nearPlane = { vec4(0.0, 0.0, -1.0, -zNear) };
-    Plane farPlane = { vec4(0.0, 0.0, 1.0, zFar) };
+    Plane nearPlane = { vec3(0.0, 0.0, -1.0), -zNear };
+    Plane farPlane = { vec3(0.0, 0.0, 1.0), zFar };
 
     if (coneInsidePlane(nearPlane, cone) || coneInsidePlane(farPlane, cone)) {
         result = false;
     }
 
     for (int i = 0; i < 4 && result; i++) {
-        if (coneInsidePlane(frustum.planes[i], cone)) {
-            result = false;
-        }
+        result = !coneInsidePlane(frustum.planes[i], cone);
     }
 
     return result;

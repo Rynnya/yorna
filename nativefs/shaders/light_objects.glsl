@@ -5,19 +5,22 @@ const float FRESNEL_0 = 0.4;
 const float PI = 3.1415926535897932384626433832795;
 
 struct PointLight {
-    vec4 position;  // w is radius
-    vec4 color;     // w is intensity
+    vec3 position;
+    float radius;
+    vec4 color;
 };
 
 struct SpotLight {
-    vec4 position;      // w is radius
-    vec4 color;         // w is intensity
-    vec4 coneDirection; // w is coneAngle
+    vec3 position;
+    float radius;
+    vec4 color;
+    vec3 coneDirection;
+    float coneAngle;
 };
 
 struct DirectionalLight {
     vec4 direction;
-    vec4 color;         // w is intensity
+    vec4 color;
 };
 
 struct PBRData {

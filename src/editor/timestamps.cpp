@@ -29,14 +29,14 @@ namespace yorna {
             return;
         }
 
-        device_->waitForRelease();
+        device_->waitDeviceIdle();
 
         vkDestroyQueryPool(device_->logicalDevice(), pool_, nullptr);
     }
 
     void QueryTimestamps::resetQueryPool(const coffee::graphics::CommandBuffer& commandBuffer)
     {
-        if (pool_ == VK_NULL_HANDLE || !writtenBeginIndices_.empty() || !writtenEndIndices_.empty()) {
+        if (pool_ == VK_NULL_HANDLE || !enabled_ || !writtenBeginIndices_.empty() || !writtenEndIndices_.empty()) {
             return;
         }
 
@@ -45,7 +45,7 @@ namespace yorna {
 
     void QueryTimestamps::writeBeginTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index)
     {
-        if (pool_ == VK_NULL_HANDLE) {
+        if (pool_ == VK_NULL_HANDLE || !enabled_) {
             return;
         }
 
@@ -61,7 +61,7 @@ namespace yorna {
 
     void QueryTimestamps::writeEndTimestamp(const coffee::graphics::CommandBuffer& commandBuffer, uint32_t index)
     {
-        if (pool_ == VK_NULL_HANDLE) {
+        if (pool_ == VK_NULL_HANDLE || !enabled_) {
             return;
         }
 
@@ -75,12 +75,16 @@ namespace yorna {
         writtenEndIndices_.push_back(index);
     }
 
+    void QueryTimestamps::enable() { enabled_ = true; }
+
+    void QueryTimestamps::disable() { enabled_ = false; }
+
     std::vector<float> QueryTimestamps::extractResults()
     {
         std::vector<float> timestampResults {};
         timestampResults.resize(amountOfTimestamps_, 0.0f);
 
-        if (pool_ == VK_NULL_HANDLE) {
+        if (pool_ == VK_NULL_HANDLE || !enabled_) {
             return timestampResults;
         }
 
@@ -116,7 +120,7 @@ namespace yorna {
 
     float QueryTimestamps::extractResults(uint32_t index)
     {
-        if (pool_ == VK_NULL_HANDLE) {
+        if (pool_ == VK_NULL_HANDLE || !enabled_) {
             return 0.0f;
         }
 

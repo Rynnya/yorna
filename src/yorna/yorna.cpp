@@ -6,40 +6,66 @@
 
 #include <imgui.h>
 
+#include <glm/gtc/random.hpp>
+
 namespace yorna {
 
-    static constexpr std::array<VkClearValue, 2> normalClearValues = { VkClearValue { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
-                                                                       VkClearValue { .depthStencil = { 0.0f, 0U } } };
+    // TODO: Make everything dynamic once done with implementing stuff
+    static constexpr uint32_t kScreenWidth = 1920U;
+    static constexpr uint32_t kScreenHeight = 1080U;
 
-    static constexpr std::array<VkClearValue, 1> depthClearValues = { VkClearValue { .depthStencil = { 0.0f, 0U } } };
+    static constexpr std::array<VkClearValue, 2> kNormalClearValues = { VkClearValue { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
+                                                                        VkClearValue { .depthStencil = { 0.0f, 0U } } };
 
-    Yorna::Yorna(const coffee::graphics::DevicePtr& device, coffee::LoopHandler& loopHandler)
-        : device { device }
+    static constexpr std::array<VkClearValue, 1> kDepthClearValues = { VkClearValue { .depthStencil = { 0.0f, 0U } } };
+
+    Yorna::Yorna(const SharedInstance& instance, coffee::LoopHandler& loopHandler)
+        : SharedInstance { instance }
         , loopHandler { loopHandler }
-        , assetManager { coffee::AssetManager::create(device) }
-        , filesystem { coffee::Filesystem::create("amazon.fs") }
-        , sunlightShadow { device, assetManager, filesystem, 2048U }
+        , earlyDepth { instance, kScreenWidth, kScreenHeight }
+        , sunlightShadow { instance, 2048U }
+        , lightCulling { instance, earlyDepth, kMaxAmountOfPointLights, kMaxAmountOfSpotLights }
+        , forwardPlus { instance, earlyDepth, sunlightShadow, lightCulling }
     {
-        createSamplers();
+        camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
+        camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
+        camera.recalculateFrustumPlanes();
+
+        lightCulling.resize(camera, kScreenWidth, kScreenHeight);
+        forwardPlus.resize(kScreenWidth, kScreenHeight);
+
         createBuffers();
-        createRenderPasses();
-        loadModels();
-        createImages();
+        createSamplers();
         createDescriptors();
-        createFramebuffer();
-        createPipelines();
+        createSyncObjects();
+        loadModels();
 
-        for (auto& frameInfo : frameInfos) {
-            frameInfo.mvpUbo.projection = camera.projection();
-            frameInfo.mvpUbo.view = camera.view();
-            frameInfo.mvpUbo.inverseView = camera.inverseView();
+        //auto* pointLightsPtr = pointLights->memory<PointLight*>();
 
-            std::memcpy(frameInfo.mvpBuffer->memory(), &frameInfo.mvpUbo, sizeof(frameInfo.mvpUbo));
-            frameInfo.mvpBuffer->flush();
-        }
+        //for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
+        //    pointLightsPtr[index] = {
+        //        .position = glm::linearRand(glm::vec3 { -15.0f, -5.0f, -5.0f }, glm::vec3 { 15.0f, 20.0f, 5.0f }),
+        //        .radius = 2.0f,
+        //        .color = glm::linearRand(glm::vec3 { 0.5f }, glm::vec3 { 1.0f }),
+        //    };
+        //}
+
+        //pointLights->flush();
+
+        //auto* spotLightsPtr = spotLights->memory<SpotLight*>();
+
+        //spotLightsPtr[0] = {
+        //    .position = { -0.5f, 1.3f, 0.0f },
+        //    .radius = 10.0f,
+        //    .color = glm::vec3 { 1.0f },
+        //    .coneDirection = glm::vec3 { 0.0f, 0.0f, 1.0f },
+        //    .coneAngle = 30.0f,
+        //};
+
+        //spotLights->flush();
     }
 
-    Yorna::~Yorna() { device->waitForRelease(); }
+    Yorna::~Yorna() { device->waitDeviceIdle(); }
 
     void Yorna::bindWindow(const coffee::graphics::Window* window) noexcept
     {
@@ -53,9 +79,16 @@ namespace yorna {
 
     void Yorna::update()
     {
+        auto commandBuffer = coffee::graphics::CommandBuffer::createTransfer(device);
+
+        completionFences[frameIndex]->wait();
+        completionFences[frameIndex]->reset();
+
+        updateObjects(commandBuffer);
+        updateLights(commandBuffer);
         cullMeshes();
-        updateObjects();
-        updateLightPoints();
+
+        device->submit(std::move(commandBuffer), submitUpdateUBOSemaphores[frameIndex]);
     }
 
     void Yorna::cullMeshes()
@@ -75,143 +108,263 @@ namespace yorna {
 
     void Yorna::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer)
     {
-        const VkRect2D renderArea = {
-            .extent = {
-                .width = depthImage->extent.width,
-                .height = depthImage->extent.height,
-            }
-        };
-
-        const VkViewport viewport = {
-            .width = static_cast<float>(renderArea.extent.width),
-            .height = static_cast<float>(renderArea.extent.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
-
         auto& meshes = model->model->meshes;
         auto& visibleMeshes = model->visibleMeshes;
-        auto& frameInfo = frameInfos[frameInfoIndex];
         auto transformationMatrix = model->transform.mat4();
 
-        commandBuffer.beginRenderPass(earlyDepthPass, earlyDepthFramebuffer, renderArea, depthClearValues.size(), depthClearValues.data());
-        commandBuffer.setViewport(viewport);
-        commandBuffer.setScissor(renderArea);
+        sunlightShadow.begin(commandBuffer);
+        sunlightShadow.push(commandBuffer, transformationMatrix);
+        commandBuffer.bindModel(model->model);
+        commandBuffer.drawModel(model->model);
+        sunlightShadow.end(commandBuffer);
 
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, earlyDepthPipeline, frameInfo.descriptorSet);
-        commandBuffer.pushConstants(earlyDepthPipeline, VK_SHADER_STAGE_VERTEX_BIT, sizeof(transformationMatrix), &transformationMatrix);
+        earlyDepth.begin(commandBuffer);
+        earlyDepth.push(commandBuffer, transformationMatrix);
         commandBuffer.bindModel(model->model);
 
         for (size_t meshID : visibleMeshes) {
             commandBuffer.drawMesh(meshes[meshID]);
         }
 
-        commandBuffer.endRenderPass();
+        earlyDepth.end(commandBuffer);
+
+        if (!device->isUnifiedGraphicsComputeQueue()) {
+            VkImageSubresourceRange depthResource {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+
+            VkImageMemoryBarrier releaseDepthBarrier {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                .dstAccessMask = 0,
+                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .image = earlyDepth.image->image(),
+                .subresourceRange = depthResource
+            };
+
+            commandBuffer.imagePipelineBarrier(
+                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0,
+                1,
+                &releaseDepthBarrier
+            );
+        }
+    }
+
+    void Yorna::submitDepthTest(coffee::graphics::CommandBuffer&& commandBuffer)
+    {
+        device->submit(std::move(commandBuffer), submitEarlyDepthSemaphores[frameIndex]);
+    }
+
+    void Yorna::performLightCulling(const coffee::graphics::CommandBuffer& commandBuffer)
+    {
+        if (!device->isUnifiedGraphicsComputeQueue()) {
+            VkImageSubresourceRange depthResource {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+
+            VkImageMemoryBarrier acquireDepthBarrier {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0,
+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .image = earlyDepth.image->image(),
+                .subresourceRange = depthResource
+            };
+
+            commandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &acquireDepthBarrier);
+        }
+
+        lightCulling.perform(commandBuffer, camera.view());
+
+        if (!device->isUnifiedGraphicsComputeQueue()) {
+            VkImageSubresourceRange depthResource {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+
+            VkImageSubresourceRange colorResource {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
+
+            std::array<VkImageMemoryBarrier, 3> releaseImageBarriers {};
+
+            releaseImageBarriers[0] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .dstAccessMask = 0,
+                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = earlyDepth.image->image(),
+                .subresourceRange = depthResource
+            };
+
+            releaseImageBarriers[1] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                .dstAccessMask = 0,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = lightCulling.pointLightGrids[lightCulling.currentFrame()]->image(),
+                .subresourceRange = colorResource
+            };
+
+            releaseImageBarriers[2] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                .dstAccessMask = 0,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = lightCulling.spotLightGrids[lightCulling.currentFrame()]->image(),
+                .subresourceRange = colorResource
+            };
+
+            commandBuffer.imagePipelineBarrier(
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0,
+                releaseImageBarriers.size(),
+                releaseImageBarriers.data()
+            );
+        }
+    }
+
+    void Yorna::submitLightCulling(coffee::graphics::CommandBuffer&& commandBuffer)
+    {
+        device->submit(std::move(commandBuffer), submitLightCullingSemaphores[frameIndex]);
     }
 
     void Yorna::performRendering(const coffee::graphics::CommandBuffer& commandBuffer)
     {
         auto& meshes = model->model->meshes;
         auto& visibleMeshes = model->visibleMeshes;
-
-        auto& frameInfo = frameInfos[frameInfoIndex];
-        auto& currentLightBuffer = frameInfo.lightUbo;
         auto transformationMatrix = model->transform.mat4();
 
-        SunLightShadow::PushConstants shadowConstants {
-            .lightSpaceMatrix = frameInfos[frameInfoIndex].lightUbo.sunlightSpaceMatrix,
-            .modelMatrix = transformationMatrix,
-        };
+        if (!device->isUnifiedGraphicsComputeQueue()) {
+            VkImageSubresourceRange depthResource {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
 
-        sunlightShadow.beginRender(commandBuffer);
-        commandBuffer.pushConstants(sunlightShadow.pipeline(), VK_SHADER_STAGE_VERTEX_BIT, sizeof(shadowConstants), &shadowConstants);
-        commandBuffer.bindModel(model->model);
-        commandBuffer.drawModel(model->model);
-        sunlightShadow.endRender(commandBuffer);
+            VkImageSubresourceRange colorResource {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            };
 
-        const VkRect2D renderArea = {
-            .extent = {
-                .width = depthImage->extent.width,
-                .height = depthImage->extent.height,
-            }
-        };
+            std::array<VkImageMemoryBarrier, 3> acquireImageBarriers {};
 
-        const VkViewport viewport = {
-            .width = static_cast<float>(renderArea.extent.width),
-            .height = static_cast<float>(renderArea.extent.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
+            acquireImageBarriers[0] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0,
+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = earlyDepth.image->image(),
+                .subresourceRange = depthResource
+            };
 
-        commandBuffer.beginRenderPass(renderPass, framebuffer, renderArea, normalClearValues.size(), normalClearValues.data());
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline);
-        commandBuffer.setViewport(viewport);
-        commandBuffer.setScissor(renderArea);
+            acquireImageBarriers[1] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0,
+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = lightCulling.pointLightGrids[lightCulling.currentFrame()]->image(),
+                .subresourceRange = colorResource
+            };
 
-        mainConstants.transform = transformationMatrix;
-        mainConstants.normal = model->transform.normal();
-        commandBuffer.pushConstants(mainPipeline, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(mainConstants), &mainConstants);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, frameInfo.descriptorSet);
+            acquireImageBarriers[2] = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0,
+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = lightCulling.spotLightGrids[lightCulling.currentFrame()]->image(),
+                .subresourceRange = colorResource
+            };
+
+            commandBuffer.imagePipelineBarrier(
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+                0,
+                acquireImageBarriers.size(),
+                acquireImageBarriers.data()
+            );
+        }
+
+        forwardPlus.begin(commandBuffer);
+        forwardPlus.push(commandBuffer, transformationMatrix, model->transform.normal());
         commandBuffer.bindModel(model->model);
 
         for (size_t meshID : visibleMeshes) {
-            commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipeline, model->descriptors[meshID], 1);
+            forwardPlus.bind(commandBuffer, model->descriptors[meshID]);
             commandBuffer.drawMesh(meshes[meshID]);
         }
 
-        commandBuffer.bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, lightPointsPipeline);
-        commandBuffer.bindDescriptorSets(VK_PIPELINE_BIND_POINT_GRAPHICS, lightPointsPipeline, frameInfo.descriptorSet);
-
-        for (uint32_t i = 0; i < currentLightBuffer.amountOfPointLights; i++) {
-            lightPointsConstants.position = currentLightBuffer.pointLights[i].position;
-            lightPointsConstants.color = currentLightBuffer.pointLights[i].color;
-
-            commandBuffer.pushConstants(
-                lightPointsPipeline,
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                sizeof(lightPointsConstants),
-                &lightPointsConstants
-            );
-            commandBuffer.draw(6);
-        }
-
-        for (uint32_t i = 0; i < currentLightBuffer.amountOfSpotLights; i++) {
-            lightPointsConstants.position = currentLightBuffer.spotLights[i].position;
-            lightPointsConstants.color = currentLightBuffer.spotLights[i].color;
-
-            commandBuffer.pushConstants(
-                lightPointsPipeline,
-                VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                sizeof(lightPointsConstants),
-                &lightPointsConstants
-            );
-            commandBuffer.draw(6);
-        }
-
-        commandBuffer.endRenderPass();
-        frameInfoIndex = (frameInfoIndex + 1) % coffee::graphics::Device::kMaxOperationsInFlight;
+        forwardPlus.end(commandBuffer);
     }
 
-    void Yorna::updateCamera()
+    void Yorna::submitRendering(coffee::graphics::CommandBuffer&& commandBuffer)
+    {
+        device->submit(std::move(commandBuffer), submitRenderingSemaphores[frameIndex], completionFences[frameIndex]);
+    }
+
+    void Yorna::updateCamera(const coffee::graphics::CommandBuffer& commandBuffer)
     {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
         camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
         camera.recalculateFrustumPlanes();
 
-        auto& frameInfo = frameInfos[frameInfoIndex];
-        frameInfo.mvpUbo.projection = camera.projection();
-        frameInfo.mvpUbo.view = camera.view();
-        frameInfo.mvpUbo.inverseView = camera.inverseView();
-
-        std::memcpy(frameInfo.mvpBuffer->memory(), &frameInfo.mvpUbo, sizeof(frameInfo.mvpUbo));
-        frameInfo.mvpBuffer->flush();
+        auto& ubo = mvpUniformBuffers[frameIndex]->memory<MVPUniformBuffer>();
+        ubo.projection = camera.projection();
+        ubo.view = camera.view();
+        ubo.inverseView = camera.inverseView();
     }
 
-    void Yorna::updateObjects()
+    void Yorna::updateObjects(const coffee::graphics::CommandBuffer& commandBuffer)
     {
         if (boundWindow == nullptr) {
-            updateCamera();
+            updateCamera(commandBuffer);
             return;
         }
 
@@ -251,39 +404,60 @@ namespace yorna {
             viewerObject.translation += moveSpeed * loopHandler.deltaTime() * glm::normalize(moveDir);
         }
 
-        updateCamera();
+        updateCamera(commandBuffer);
     }
 
-    void Yorna::updateLightPoints()
+    void Yorna::updateLights(const coffee::graphics::CommandBuffer& commandBuffer)
     {
-        auto rotateLight = glm::rotate(glm::mat4 { 1.0f }, loopHandler.deltaTime(), { 0.0f, -1.0f, 0.0f });
-        auto& lightUbo = frameInfos[frameInfoIndex].lightUbo;
+        constexpr VkBufferCopy pointLightCopyRegion { .srcOffset = 0, .dstOffset = 0, .size = kMaxAmountOfPointLights * sizeof(PointLight) };
+        commandBuffer.copyBuffer(pointLights, lightCulling.pointLightsBuffers[lightCulling.currentFrame()], 1, &pointLightCopyRegion);
 
-        lightUbo.sunlightSpaceMatrix = sunlightShadow.camera().projection() * sunlightShadow.camera().view();
-        lightUbo.sunlightDirection = glm::vec4 { sunlightShadow.lightObject().direction, 1.0f };
-        lightUbo.sunlightColor = glm::vec4 { sunlightShadow.lightObject().color, 1.0f };
+        constexpr VkBufferCopy spotLightCopyRegion { .srcOffset = 0, .dstOffset = 0, .size = kMaxAmountOfSpotLights * sizeof(SpotLight) };
+        commandBuffer.copyBuffer(spotLights, lightCulling.spotLightsBuffers[lightCulling.currentFrame()], 1, &spotLightCopyRegion);
 
-        lightUbo.amountOfPointLights = static_cast<uint32_t>(pointLights.size());
-        lightUbo.amountOfSpotLights = static_cast<uint32_t>(spotLights.size());
-
-        for (size_t i = 0; i < pointLights.size(); i++) {
-            pointLights[i].position = glm::vec3(rotateLight * glm::vec4 { pointLights[i].position, 1.0f });
-
-            lightUbo.pointLights[i].position = glm::vec4(pointLights[i].position, 0.1f);
-            lightUbo.pointLights[i].color = glm::vec4(pointLights[i].color, pointLights[i].intensity);
-        }
-
-        for (size_t i = 0; i < spotLights.size(); i++) {
-            lightUbo.spotLights[i].position = glm::vec4(spotLights[i].position, 0.1f);
-            lightUbo.spotLights[i].color = glm::vec4(spotLights[i].color, spotLights[i].intensity);
-            lightUbo.spotLights[i].coneDirection = glm::vec4(spotLights[i].coneDirection, spotLights[i].coneAngle);
-        }
-
-        std::memcpy(frameInfos[frameInfoIndex].lightBuffer->memory(), &lightUbo, sizeof(lightUbo));
-        frameInfos[frameInfoIndex].lightBuffer->flush();
+        lightCulling.reset(commandBuffer);
     }
+
+    void Yorna::nextFrame() noexcept
+    {
+        earlyDepth.nextFrame();
+        sunlightShadow.nextFrame();
+        lightCulling.nextFrame();
+        forwardPlus.nextFrame();
+
+        frameIndex = (frameIndex + 1) % coffee::graphics::Device::kMaxOperationsInFlight;
+    }
+
+    uint32_t Yorna::currentFrame() const noexcept { return frameIndex; }
 
     // clang-format off
+
+    void Yorna::createBuffers()
+    {
+        pointLights = coffee::graphics::Buffer::create(device, {
+            .instanceSize = sizeof(PointLight),
+            .instanceCount = kMaxAmountOfPointLights,
+            .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            .allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+        });
+
+        spotLights = coffee::graphics::Buffer::create(device, {
+            .instanceSize = sizeof(SpotLight),
+            .instanceCount = kMaxAmountOfSpotLights,
+            .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            .allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            .allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
+        });
+
+        std::memset(pointLights->memory(), 0, kMaxAmountOfPointLights * sizeof(PointLight));
+        std::memset(spotLights->memory(), 0, kMaxAmountOfSpotLights * sizeof(SpotLight));
+
+        pointLights->flush();
+        spotLights->flush();
+    }
 
     void Yorna::createSamplers()
     {
@@ -312,192 +486,48 @@ namespace yorna {
         });
     }
 
-    void Yorna::createBuffers()
+    void Yorna::createDescriptors()
     {
-        for (auto& frameInfo : frameInfos) {
-            frameInfo.mvpBuffer = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(MVPUniformBuffer),
-                .instanceCount = 1U,
-                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            });
+        outputLayout = coffee::graphics::DescriptorLayout::create(device, {
+            { 0, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } }
+        });
 
-            frameInfo.lightBuffer = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(LightUniformBuffer),
-                .instanceCount = 1U,
-                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-            });
+        coffee::graphics::DescriptorWriter outputWriter = coffee::graphics::DescriptorWriter(outputLayout);
+        outputWriter.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, forwardPlus.view, textureSampler);
+
+        outputDescriptor = coffee::graphics::DescriptorSet::create(device, outputWriter);
+    }
+
+    void Yorna::createSyncObjects()
+    {
+        for (size_t index = 0; index < coffee::graphics::Device::kMaxOperationsInFlight; index++) {
+            updateUBOSemaphores[index] = coffee::graphics::Semaphore::create(device);
+            earlyDepthSemaphores[index] = coffee::graphics::Semaphore::create(device);
+            lightCullingSemaphores[index] = coffee::graphics::Semaphore::create(device);
+            completionFences[index] = coffee::graphics::Fence::create(device, true);
+
+            submitUpdateUBOSemaphores[index].signalSemaphores.push_back(updateUBOSemaphores[index]);
+            submitEarlyDepthSemaphores[index].signalSemaphores.push_back(earlyDepthSemaphores[index]);
+
+            submitLightCullingSemaphores[index].waitSemaphores.push_back(updateUBOSemaphores[index]);
+            submitLightCullingSemaphores[index].waitDstStageMasks.push_back(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            submitLightCullingSemaphores[index].waitSemaphores.push_back(earlyDepthSemaphores[index]);
+            submitLightCullingSemaphores[index].waitDstStageMasks.push_back(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+            submitLightCullingSemaphores[index].signalSemaphores.push_back(lightCullingSemaphores[index]);
+
+            submitRenderingSemaphores[index].waitSemaphores.push_back(lightCullingSemaphores[index]);
+            submitRenderingSemaphores[index].waitDstStageMasks.push_back(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         }
     }
 
     void Yorna::loadModels()
     {
-        model = std::make_unique<Model>(device, assetManager->getModel(filesystem, "exterior.cfa"), textureSampler);
+        model = std::make_unique<Model>(device, assetManager->getModel(filesystem, "sponza_scene.cfa"), textureSampler);
 
-        device->waitGraphicsQueueIdle();
+        device->waitDeviceIdle();
 
         viewerObject.translation.z = -1.5f;
         viewerObject.translation.y = 1.0f;
-    }
-
-    void Yorna::createRenderPasses()
-    {
-        earlyDepthPass = coffee::graphics::RenderPass::create(device, {
-            .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
-                .format = device->optimalDepthFormat(),
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            },
-        });
-
-        renderPass = coffee::graphics::RenderPass::create(device, {
-            .colorAttachments = { coffee::graphics::AttachmentConfiguration {
-                .format = device->surfaceFormat(),
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            }},
-            .depthStencilAttachment = coffee::graphics::AttachmentConfiguration {
-                .format = device->optimalDepthFormat(),
-                .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-            },
-        });
-    }
-
-    void Yorna::createPipelines()
-    {
-        earlyDepthPipeline = coffee::graphics::Pipeline::create(device, earlyDepthPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/early_depth.vert.spv"),
-            .layouts = {
-                gameLayout
-            },
-            .inputBindings = { coffee::graphics::InputBinding {
-                .binding = 0U,
-                .stride = sizeof(coffee::Vertex),
-                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-                .elements = coffee::Vertex::getElementDescriptions()
-            }},
-            .constantRanges = { coffee::graphics::PushConstantRange {
-                .stages = VK_SHADER_STAGE_VERTEX_BIT,
-                .size = static_cast<uint32_t>(sizeof(glm::mat4))
-            }},
-            .rasterizationInfo = {
-                .cullMode = VK_CULL_MODE_BACK_BIT
-            },
-            .depthStencilInfo = {
-                .depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL
-            }
-        });
-
-        mainPipeline = coffee::graphics::Pipeline::create(device, renderPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/forward.vert.spv"),
-            .fragmentShader = assetManager->getShader(filesystem, "shaders/forward.frag.spv"),
-            .layouts = {
-                gameLayout,
-                model->layout
-            },
-            .inputBindings = { coffee::graphics::InputBinding {
-                .binding = 0U,
-                .stride = sizeof(coffee::Vertex),
-                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-                .elements = coffee::Vertex::getElementDescriptions()
-            }},
-            .constantRanges = { coffee::graphics::PushConstantRange {
-                .stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                .size = static_cast<uint32_t>(sizeof(MainPushConstants))
-            }},
-            .rasterizationInfo = {
-                .cullMode = VK_CULL_MODE_BACK_BIT
-            },
-            .depthStencilInfo = {
-                .depthCompareOp = VK_COMPARE_OP_EQUAL
-            },
-        });
-
-        lightPointsPipeline = coffee::graphics::Pipeline::create(device, renderPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/point_light.vert.spv"),
-            .fragmentShader = assetManager->getShader(filesystem, "shaders/point_light.frag.spv"),
-            .layouts = {
-                gameLayout
-            },
-            .constantRanges = { coffee::graphics::PushConstantRange {
-                .stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                .size = static_cast<uint32_t>(sizeof(LightPushConstants))
-            }},
-            .rasterizationInfo = {
-                .cullMode = VK_CULL_MODE_BACK_BIT
-            },
-            .depthStencilInfo = {
-                .depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL
-            },
-        });
-    }
-
-    void Yorna::createImages()
-    {
-        colorImage = coffee::graphics::Image::create(device, {
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = device->surfaceFormat(),
-            .extent = { 1920U, 1080U, },
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-            .allocationFlags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            .priority = 1.0f
-        });
-
-        colorImageView = coffee::graphics::ImageView::create(colorImage, {
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = device->surfaceFormat()
-        });
-
-        depthImage = coffee::graphics::Image::create(device, {
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = device->optimalDepthFormat(),
-            .extent = { 1920U, 1080U, },
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-            .allocationFlags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-            .priority = 1.0f
-        });
-
-        depthImageView = coffee::graphics::ImageView::create(depthImage, {
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = device->optimalDepthFormat(),
-            .subresourceRange = {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1
-            }
-        });
-    }
-
-    void Yorna::createFramebuffer()
-    {
-        earlyDepthFramebuffer = coffee::graphics::Framebuffer::create(device, earlyDepthPass, {
-            .extent = { depthImage->extent.width, depthImage->extent.height },
-            .depthStencilView = depthImageView
-        });
-
-        framebuffer = coffee::graphics::Framebuffer::create(device, renderPass, {
-            .extent = { colorImage->extent.width, colorImage->extent.height },
-            .colorViews = { colorImageView },
-            .depthStencilView = depthImageView
-        });
     }
 
     // clang-format on
@@ -505,38 +535,9 @@ namespace yorna {
     void Yorna::updateDescriptors()
     {
         coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter(outputLayout);
+        writer.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, forwardPlus.view, textureSampler);
 
-        outputSet->updateDescriptor(writer.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler));
-    }
-
-    void Yorna::createDescriptors()
-    {
-        // clang-format off
-        gameLayout = coffee::graphics::DescriptorLayout::create(device, {
-            { 0, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 1, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT } },
-            { 2, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } },
-        });
-
-        outputLayout = coffee::graphics::DescriptorLayout::create(device, {
-            { 0, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } },
-        });
-        // clang-format on
-
-        for (auto& frameInfo : frameInfos) {
-            coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter(gameLayout);
-
-            writer.addBuffer(0, frameInfo.mvpBuffer);
-            writer.addBuffer(1, frameInfo.lightBuffer);
-            writer.addImage(2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, sunlightShadow.mapView(), sunlightShadow.sampler());
-
-            frameInfo.descriptorSet = coffee::graphics::DescriptorSet::create(device, writer);
-        }
-
-        coffee::graphics::DescriptorWriter outputWriter = coffee::graphics::DescriptorWriter(outputLayout);
-        outputWriter.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, colorImageView, textureSampler);
-
-        outputSet = coffee::graphics::DescriptorSet::create(device, outputWriter);
+        outputDescriptor->update(writer);
     }
 
     void Yorna::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept

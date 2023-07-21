@@ -9,6 +9,7 @@ layout (std430, binding = 0, set = 0) writeonly buffer OutputFrustums { Frustum 
 layout (push_constant) uniform Push {
     mat4 inverseProjection;
     vec2 screenDimensions;
+    uvec2 numThreads;
 } push;
 
 void main() {
@@ -32,8 +33,7 @@ void main() {
     frustum.planes[2] = computePlane(eyePosition, viewSpace[0], viewSpace[1]);
     frustum.planes[3] = computePlane(eyePosition, viewSpace[3], viewSpace[2]);
 
-    if (gl_GlobalInvocationID.x < gl_WorkGroupSize.x && gl_GlobalInvocationID.y < gl_WorkGroupSize.y) {
-        uint index = gl_GlobalInvocationID.x + (gl_GlobalInvocationID.y * gl_WorkGroupSize.x);
-        outFrustums[index] = frustum;
+    if (gl_GlobalInvocationID.x < push.numThreads.x && gl_GlobalInvocationID.y < push.numThreads.y) {
+        outFrustums[gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * push.numThreads.x] = frustum;
     }
 }

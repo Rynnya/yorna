@@ -37,6 +37,8 @@ namespace yorna {
         const glm::mat4& view() const noexcept;
         const glm::mat4& inverseView() const noexcept;
 
+        glm::mat4 computeInverseProjection() const noexcept;
+
     private:
         glm::mat4 viewProjection_ {};
         glm::vec4 frustumPlanes_[kAmountOfPlanes] {};

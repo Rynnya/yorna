@@ -30,7 +30,7 @@ namespace yorna {
         coffee::graphics::DescriptorLayoutPtr layout = nullptr;
         coffee::graphics::DescriptorSetPtr descriptorSet = nullptr;
         coffee::graphics::RenderPassPtr renderPass = nullptr;
-        coffee::graphics::PipelinePtr pipeline = nullptr;
+        coffee::graphics::GraphicsPipelinePtr pipeline = nullptr;
         coffee::graphics::ImagePtr fonts = nullptr;
         coffee::graphics::ImageViewPtr fontsView = nullptr;
         coffee::graphics::SamplerPtr fontsSampler = nullptr;

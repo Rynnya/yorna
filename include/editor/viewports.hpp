@@ -50,6 +50,7 @@ namespace yorna {
 
         float averageImGuiTime[kAverageStatisticBufferSize] {};
         float averageDepthPass[kAverageStatisticBufferSize] {};
+        float averageLightPass[kAverageStatisticBufferSize] {};
         float averageRendering[kAverageStatisticBufferSize] {};
 
         uint32_t statisticIndex = 0;

@@ -16,8 +16,7 @@ namespace yorna {
         for (size_t i = 0; i < meshesInformationBuffers.size(); i++) {
             const auto& buffer = meshesInformationBuffers[i];
 
-            buffer->map();
-            std::memcpy(buffer->memory(), &meshesInformation[i], sizeof(MeshInformation));
+            std::memcpy(buffer->map(), &meshesInformation[i], sizeof(MeshInformation));
             buffer->flush();
             buffer->unmap();
         }
