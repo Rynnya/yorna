@@ -24,17 +24,18 @@ namespace yorna {
 
         void updateMeshesInformation();
 
-        const coffee::graphics::DevicePtr& device;
-        coffee::ModelPtr model = nullptr;
+        coffee::ModelPtr model {};
         TransformComponent transform {};
         std::vector<size_t> visibleMeshes {};
+
         std::vector<MeshInformation> meshesInformation {};
         std::vector<coffee::graphics::BufferPtr> meshesInformationBuffers {};
-        coffee::graphics::DescriptorLayoutPtr layout = nullptr;
+
+        coffee::graphics::DescriptorLayoutPtr layout {};
         std::vector<coffee::graphics::DescriptorSetPtr> descriptors {};
 
     private:
-        void initialize(const coffee::graphics::SamplerPtr& textureSampler);
+        const coffee::graphics::DevicePtr& device;
     };
 
 } // namespace yorna

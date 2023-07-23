@@ -4,6 +4,8 @@ bin/
 build/
 
 # Native filesystem files, except for source code shaders
+*.spv
+
 !nativefs/
 nativefs/*
 !nativefs/shaders/

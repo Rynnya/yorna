@@ -22,6 +22,7 @@ namespace yorna {
             u8"Save Project",
             u8"Close Project",
             u8"Scene Hierarchy",
+            u8"Object Details",
             u8"Scene Viewport",
             u8"Asset Browser",
             u8"Keep the aspect ratio 16:9",
@@ -42,6 +43,7 @@ namespace yorna {
             u8"Сохранить проект",
             u8"Закрыть проект",
             u8"Иерархия сцены",
+            u8"Детали объекта"
             u8"Вид сцены",
             u8"Просмотр сцены",
             u8"Поддерживать соотношение сторон 16:9",
@@ -66,6 +68,7 @@ namespace yorna {
         SaveProject,
         CloseProject,
         SceneHierarchy,
+        GuizmoViewport,
         SceneViewport,
         AssetBrowser,
         KeepAspectRatio,

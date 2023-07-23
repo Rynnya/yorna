@@ -5,44 +5,22 @@
 namespace yorna {
 
     Model::Model(const coffee::graphics::DevicePtr& device, const coffee::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler)
-        : device { device }
-        , model { model }
-    {
-        initialize(textureSampler);
-    }
-
-    void Model::updateMeshesInformation()
-    {
-        for (size_t i = 0; i < meshesInformationBuffers.size(); i++) {
-            const auto& buffer = meshesInformationBuffers[i];
-
-            std::memcpy(buffer->map(), &meshesInformation[i], sizeof(MeshInformation));
-            buffer->flush();
-            buffer->unmap();
-        }
-    }
-
-    void Model::initialize(const coffee::graphics::SamplerPtr& textureSampler)
+        : model { model }
+        , device { device }
     {
         const auto& meshes = model->meshes;
         meshesInformation.resize(meshes.size());
 
-        std::map<uint32_t, coffee::graphics::DescriptorBindingInfo> bindings {};
-        coffee::graphics::DescriptorBindingInfo binding {};
-
-        binding.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        binding.shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings[0] = binding;
-
-        binding.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        binding.shaderStages = VK_SHADER_STAGE_FRAGMENT_BIT;
-        bindings[1] = binding;
-        bindings[2] = binding;
-        bindings[3] = binding;
-        bindings[4] = binding;
-        bindings[5] = binding;
-
-        layout = coffee::graphics::DescriptorLayout::create(device, bindings);
+        // clang-format off
+        layout = coffee::graphics::DescriptorLayout::create(device, {
+            { 0, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT          } },
+            { 1, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
+            { 2, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
+            { 3, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
+            { 4, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
+            { 5, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
+        });
+        // clang-format on
 
         coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter { layout };
 
@@ -52,7 +30,7 @@ namespace yorna {
             bufferConfiguration.instanceCount = 1U;
             bufferConfiguration.usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
             bufferConfiguration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            bufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+            bufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
             meshesInformationBuffers.push_back(coffee::graphics::Buffer::create(device, bufferConfiguration));
 
             auto& meshMaterials = meshes[i].materials;
@@ -75,6 +53,13 @@ namespace yorna {
         }
 
         updateMeshesInformation();
+    }
+
+    void Model::updateMeshesInformation()
+    {
+        for (size_t i = 0; i < meshesInformationBuffers.size(); i++) {
+            std::memcpy(meshesInformationBuffers[i]->memory(), &meshesInformation[i], sizeof(MeshInformation));
+        }
     }
 
 } // namespace yorna

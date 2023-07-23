@@ -17,11 +17,14 @@
 
 namespace yorna {
 
-    constexpr size_t kMaxAmountOfPointLights = 64U;
-    constexpr size_t kMaxAmountOfSpotLights = 4U;
-
     class Yorna : SharedInstance {
     public:
+        static constexpr size_t kMaxAmountOfPointLights = 128U;
+        static constexpr size_t kMaxAmountOfSpotLights = 4U;
+
+        static_assert(kMaxAmountOfPointLights > 0);
+        static_assert(kMaxAmountOfSpotLights > 0);
+
         Yorna(const SharedInstance& instance, coffee::LoopHandler& loopHandler);
         ~Yorna();
 
@@ -36,6 +39,8 @@ namespace yorna {
         void performRendering(const coffee::graphics::CommandBuffer& commandBuffer);
         void submitRendering(coffee::graphics::CommandBuffer&& commandBuffer);
 
+        // TODO: Make it dynamic, right now only used as static
+        glm::uvec2 outputViewport { 1920U, 1080U };
         std::atomic<float> outputAspect { 1280.0f / 720.0f };
 
         coffee::graphics::DescriptorLayoutPtr outputLayout;
@@ -43,6 +48,9 @@ namespace yorna {
 
         Camera camera {};
         TransformComponent viewerObject {};
+
+        coffee::graphics::BufferPtr pointLights;
+        coffee::graphics::BufferPtr spotLights;
 
         void nextFrame() noexcept;
         uint32_t currentFrame() const noexcept;
@@ -71,9 +79,6 @@ namespace yorna {
         SunlightShadow sunlightShadow;
         LightCulling lightCulling;
         ForwardPlus forwardPlus;
-
-        coffee::graphics::BufferPtr pointLights;
-        coffee::graphics::BufferPtr spotLights;
 
         PerFlightFrame<coffee::graphics::SemaphorePtr> updateUBOSemaphores;
         PerFlightFrame<coffee::graphics::SemaphorePtr> earlyDepthSemaphores;

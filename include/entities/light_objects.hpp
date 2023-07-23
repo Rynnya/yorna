@@ -20,7 +20,7 @@ namespace yorna {
         // Radius of light
         float radius { 0.0f };
         // RGB color of light
-        glm::vec3 color { 0.0f };
+        glm::vec3 color { 1.0f };
         alignas(16) glm::vec3 coneDirection { 0.0f };
         // Cone angle in degress
         float coneAngle { 30.0f };

@@ -2062,7 +2062,7 @@ namespace yorna {
 
     ImGuiImplementation::~ImGuiImplementation()
     {
-        vkDeviceWaitIdle(device->logicalDevice());
+        device->waitDeviceIdle();
 
         ImGui::DestroyPlatformWindows();
 
@@ -2164,35 +2164,27 @@ namespace yorna {
             coffee::graphics::BufferPtr& indexBuffer = rendererData->indexBuffers[frameIndex];
 
             if (vertexBuffer == nullptr || (vertexBuffer->instanceSize * vertexBuffer->instanceCount) < vertexSize) {
-                if (vertexBuffer != nullptr) {
-                    vertexBuffer->unmap();
-                }
-
-                coffee::graphics::BufferConfiguration configuration {};
-                configuration.instanceSize = sizeof(ImDrawVert);
-                configuration.instanceCount = data->TotalVtxCount;
-                configuration.usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-                configuration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-                configuration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+                coffee::graphics::BufferConfiguration configuration {
+                    .instanceSize = static_cast<uint32_t>(sizeof(ImDrawVert)),
+                    .instanceCount = static_cast<uint32_t>(data->TotalVtxCount),
+                    .usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                    .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                };
 
                 vertexBuffer = coffee::graphics::Buffer::create(backendData->device, configuration);
-                vertexBuffer->map();
             }
 
             if (indexBuffer == nullptr || (indexBuffer->instanceSize * indexBuffer->instanceCount) < indexSize) {
-                if (indexBuffer != nullptr) {
-                    indexBuffer->unmap();
-                }
-
-                coffee::graphics::BufferConfiguration configuration {};
-                configuration.instanceSize = sizeof(ImDrawIdx);
-                configuration.instanceCount = data->TotalIdxCount;
-                configuration.usageFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-                configuration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-                configuration.allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+                coffee::graphics::BufferConfiguration configuration {
+                    .instanceSize = static_cast<uint32_t>(sizeof(ImDrawIdx)),
+                    .instanceCount = static_cast<uint32_t>(data->TotalIdxCount),
+                    .usageFlags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                    .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+                };
 
                 indexBuffer = coffee::graphics::Buffer::create(backendData->device, configuration);
-                indexBuffer->map();
             }
 
             size_t vertexOffset = 0;
@@ -2200,6 +2192,7 @@ namespace yorna {
 
             for (size_t i = 0; i < data->CmdListsCount; i++) {
                 const ImDrawList* list = data->CmdLists[i];
+
                 char* vertexMemory = static_cast<char*>(vertexBuffer->memory());
                 char* indexMemory = static_cast<char*>(indexBuffer->memory());
 
@@ -2424,18 +2417,6 @@ namespace yorna {
                     }
                 }
 
-                for (const auto& buffer : rendererData->vertexBuffers) {
-                    if (buffer != nullptr) {
-                        buffer->unmap();
-                    }
-                }
-
-                for (const auto& buffer : rendererData->indexBuffers) {
-                    if (buffer != nullptr) {
-                        buffer->unmap();
-                    }
-                }
-
                 // If user destroys window while cursor is captured
                 if (viewportData->windowHandle == backendData->fullControlWindowPtr) {
                     backendData->fullControlWindowPtr = nullptr;
@@ -2491,8 +2472,7 @@ namespace yorna {
         };
 
         platformIO.Platform_GetWindowMinimized = [](ImGuiViewport* viewport) -> bool {
-            bool result = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->isIconified();
-            return result;
+            return static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->isIconified();
         };
 
         platformIO.Platform_SetWindowTitle = [](ImGuiViewport* viewport, const char* str) {
@@ -2664,75 +2644,93 @@ namespace yorna {
             .instanceCount = 1U,
             .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-            .allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+            .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
         });
 
-        stagingBuffer->map();
-        {
-            std::memcpy(stagingBuffer->memory(), fontPixels, static_cast<size_t>(width * height));
-            stagingBuffer->flush();
-        }
-        stagingBuffer->unmap();
+        std::memcpy(stagingBuffer->memory(), fontPixels, static_cast<size_t>(width * height));
+        stagingBuffer->flush();
 
         coffee::graphics::CommandBuffer transferCommandBuffer = coffee::graphics::CommandBuffer::createTransfer(device);
-        VkImageMemoryBarrier barrier { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
-        VkBufferImageCopy copyRegion {};
 
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = backendData->fonts->image();
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.layerCount = 1;
-        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &barrier);
+        VkImageMemoryBarrier beforeCopyBarrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = backendData->fonts->image(),
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            }
+        };
 
-        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyRegion.imageSubresource.layerCount = 1;
-        copyRegion.imageExtent = backendData->fonts->extent;
+        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &beforeCopyBarrier);
+
+        VkBufferImageCopy copyRegion {
+            .imageSubresource = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .imageExtent = backendData->fonts->extent,
+        };
         transferCommandBuffer.copyBufferToImage(stagingBuffer, backendData->fonts, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = backendData->fonts->image();
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.layerCount = 1;
-        VkPipelineStageFlagBits useStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        VkImageMemoryBarrier afterCopyBarrier {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = device->isUnifiedGraphicsTransferQueue() ? VK_ACCESS_SHADER_READ_BIT : static_cast<VkAccessFlags>(0),
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = device->transferQueueFamilyIndex(),
+            .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+            .image = backendData->fonts->image(),
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            }
+        };
 
-        if (!device->isUnifiedGraphicsTransferQueue()) {
-            barrier.dstAccessMask = 0;
-            barrier.srcQueueFamilyIndex = device->transferQueueFamilyIndex();
-            barrier.dstQueueFamilyIndex = device->graphicsQueueFamilyIndex();
-            useStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        }
-
-        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &barrier);
-        device->submit(std::move(transferCommandBuffer));
+        VkPipelineStageFlagBits useStage = device->isUnifiedGraphicsTransferQueue()
+            ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+            : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        transferCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, useStage, 0, 1, &afterCopyBarrier);
+        device->submit(std::move(transferCommandBuffer), {}, nullptr, true);
 
         if (!device->isUnifiedGraphicsTransferQueue()) {
             coffee::graphics::CommandBuffer ownershipCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(device);
 
-            barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.srcQueueFamilyIndex = device->transferQueueFamilyIndex();
-            barrier.dstQueueFamilyIndex = device->graphicsQueueFamilyIndex();
-            barrier.image = backendData->fonts->image();
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.layerCount = 1;
+            VkImageMemoryBarrier ownershipBarrier {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .srcAccessMask = 0,
+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = device->transferQueueFamilyIndex(),
+                .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
+                .image = backendData->fonts->image(),
+                .subresourceRange = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+            };
 
-            ownershipCommandBuffer.imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &barrier);
-            device->submit(std::move(ownershipCommandBuffer));
+            ownershipCommandBuffer
+                .imagePipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &ownershipBarrier);
+            device->submit(std::move(ownershipCommandBuffer), {}, nullptr, true);
         }
 
         backendData->fontsView = coffee::graphics::ImageView::create(backendData->fonts, {
@@ -2753,13 +2751,14 @@ namespace yorna {
     {
         ImGuiBackendRendererData* backendData = static_cast<ImGuiBackendRendererData*>(ImGui::GetIO().BackendRendererUserData);
 
-        const std::map<uint32_t, coffee::graphics::DescriptorBindingInfo> bindings {
-            { 0, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } }
-        };
+        backendData->layout = coffee::graphics::DescriptorLayout::create(device, {
+           { 0, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT } }
+        });
 
-        backendData->layout = coffee::graphics::DescriptorLayout::create(device, bindings);
-        backendData->descriptorSet = coffee::graphics::DescriptorSet::create(device, coffee::graphics::DescriptorWriter(backendData->layout)
-            .addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, backendData->fontsView, backendData->fontsSampler));
+        auto writer = coffee::graphics::DescriptorWriter(backendData->layout);
+        writer.addImage(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, backendData->fontsView, backendData->fontsSampler);
+
+        backendData->descriptorSet = coffee::graphics::DescriptorSet::create(device, writer);
     }
 
     void ImGuiImplementation::createRenderPass()
@@ -2856,13 +2855,13 @@ namespace yorna {
     void ImGuiImplementation::mouseClickCallback(const coffee::graphics::Window& window, const coffee::MouseClickEvent& e)
     {
         ImGuiIO& io = ImGui::GetIO();
+        uint8_t button = static_cast<uint8_t>(e.button);
 
         io.AddKeyEvent(ImGuiMod_Ctrl, e.control);
         io.AddKeyEvent(ImGuiMod_Shift, e.shift);
         io.AddKeyEvent(ImGuiMod_Alt, e.alt);
         io.AddKeyEvent(ImGuiMod_Super, e.super);
 
-        uint8_t button = static_cast<uint8_t>(e.button);
         if (button >= 0 && button < ImGuiMouseButton_COUNT) {
             io.AddMouseButtonEvent(button, e.state == coffee::State::Press);
         }

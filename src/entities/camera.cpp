@@ -39,7 +39,7 @@ namespace yorna {
             return;
         }
 
-        const float reverseTanHalfFovy = 1.0f / glm::tan(fovy / 2.0f);
+        const float reverseTanHalfFovy = 1.0f / glm::tan(glm::radians(fovy) / 2.0f);
         projectionMatrix_ = glm::mat4 { 0.0f };
         projectionMatrix_[0][0] = reverseTanHalfFovy / aspect;
         projectionMatrix_[1][1] = -reverseTanHalfFovy;

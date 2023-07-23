@@ -2,9 +2,10 @@
 #define YORNA_EDITOR_VIEWPORTS
 
 #include <editor/entities.hpp>
+#include <entities/transform_component.hpp>
 
+#include <ImGuizmo.h>
 #include <coffee/interfaces/filesystem.hpp>
-
 #include <imgui_file_dialog.h>
 
 #include <filesystem>
@@ -57,6 +58,15 @@ namespace yorna {
         int32_t deviceHeapIndex = kInvalidHeapIndex;
         int32_t hostHeapIndex = kInvalidHeapIndex;
         int32_t sharedHeapIndex = kInvalidHeapIndex;
+
+        ImVec2 size {};
+        ImVec2 framerateTextPosition {};
+    };
+
+    struct GuizmoViewport : Viewport {
+        ImGuizmo::OPERATION operation = ImGuizmo::OPERATION::TRANSLATE;
+        ImGuizmo::MODE mode = ImGuizmo::MODE::WORLD;
+        TransformComponent* affectedModel = nullptr;
     };
 
     struct DirectoryObject {

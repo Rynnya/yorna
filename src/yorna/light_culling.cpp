@@ -29,7 +29,7 @@ namespace yorna {
         frustumsCompletionFence = coffee::graphics::Fence::create(device);
 
         defaultIndexCounters = coffee::graphics::Buffer::create(device, {
-            .instanceSize = sizeof(OutputIndexCounters),
+            .instanceSize = static_cast<uint32_t>(sizeof(OutputIndexCounters)),
             .instanceCount = 1,
             .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -38,7 +38,7 @@ namespace yorna {
 
         for (size_t index = 0; index < coffee::graphics::Device::kMaxOperationsInFlight; index++) {
             pointLightsBuffers[index] = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(PointLight),
+                .instanceSize = static_cast<uint32_t>(sizeof(PointLight)),
                 .instanceCount = kAmountOfPointLights,
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -46,7 +46,7 @@ namespace yorna {
             });
 
             spotLightsBuffers[index] = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(SpotLight),
+                .instanceSize = static_cast<uint32_t>(sizeof(SpotLight)),
                 .instanceCount = kAmountOfSpotLights,
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -54,7 +54,7 @@ namespace yorna {
             });
 
             indexCounters[index] = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(OutputIndexCounters),
+                .instanceSize = static_cast<uint32_t>(sizeof(OutputIndexCounters)),
                 .instanceCount = 1,
                 .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -162,7 +162,7 @@ namespace yorna {
             spotLightGridView = nullptr;
 
             pointLightIndexList = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(uint32_t),
+                .instanceSize = static_cast<uint32_t>(sizeof(uint32_t)),
                 .instanceCount = widthInTiles * heightInTiles * kAverageOverlappingLightsPerTile,
                 .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -170,7 +170,7 @@ namespace yorna {
             });
 
             spotLightIndexList = coffee::graphics::Buffer::create(device, {
-                .instanceSize = sizeof(uint32_t),
+                .instanceSize = static_cast<uint32_t>(sizeof(uint32_t)),
                 .instanceCount = widthInTiles * heightInTiles * kAverageOverlappingLightsPerTile,
                 .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -291,9 +291,7 @@ namespace yorna {
     {
         COFFEE_ASSERT(calculatedFrustums != nullptr, "Did you forgot to call 'resize' before using LightCulling?");
 
-        LightCullingPushConstants pushConstants {};
-        pushConstants.inverseProjection = inverseProjection;
-        pushConstants.viewMatrix = viewMatrix;
+        LightCullingPushConstants pushConstants { .inverseProjection = inverseProjection, .viewMatrix = viewMatrix };
 
         commandBuffer.bindPipeline(lightCullingPipeline);
         commandBuffer.bindDescriptorSets(lightCullingPipeline, lightCullingDescriptors[frameIndex]);

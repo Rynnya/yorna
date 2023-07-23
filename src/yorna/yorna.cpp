@@ -10,10 +10,6 @@
 
 namespace yorna {
 
-    // TODO: Make everything dynamic once done with implementing stuff
-    static constexpr uint32_t kScreenWidth = 1920U;
-    static constexpr uint32_t kScreenHeight = 1080U;
-
     static constexpr std::array<VkClearValue, 2> kNormalClearValues = { VkClearValue { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
                                                                         VkClearValue { .depthStencil = { 0.0f, 0U } } };
 
@@ -22,47 +18,23 @@ namespace yorna {
     Yorna::Yorna(const SharedInstance& instance, coffee::LoopHandler& loopHandler)
         : SharedInstance { instance }
         , loopHandler { loopHandler }
-        , earlyDepth { instance, kScreenWidth, kScreenHeight }
+        , earlyDepth { instance, outputViewport.x, outputViewport.y }
         , sunlightShadow { instance, 2048U }
         , lightCulling { instance, earlyDepth, kMaxAmountOfPointLights, kMaxAmountOfSpotLights }
         , forwardPlus { instance, earlyDepth, sunlightShadow, lightCulling }
     {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
-        camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
+        camera.setReversePerspectiveProjection(80.0f, outputAspect.load(std::memory_order_relaxed));
         camera.recalculateFrustumPlanes();
 
-        lightCulling.resize(camera, kScreenWidth, kScreenHeight);
-        forwardPlus.resize(kScreenWidth, kScreenHeight);
+        lightCulling.resize(camera, outputViewport.x, outputViewport.y);
+        forwardPlus.resize(outputViewport.x, outputViewport.y);
 
         createBuffers();
         createSamplers();
         createDescriptors();
         createSyncObjects();
         loadModels();
-
-        auto* pointLightsPtr = pointLights->memory<PointLight*>();
-
-        for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
-            pointLightsPtr[index] = {
-                .position = glm::linearRand(glm::vec3 { -15.0f, -5.0f, -5.0f }, glm::vec3 { 15.0f, 20.0f, 5.0f }),
-                .radius = 2.0f,
-                .color = glm::linearRand(glm::vec3 { 0.5f }, glm::vec3 { 1.0f }),
-            };
-        }
-
-        pointLights->flush();
-
-        //auto* spotLightsPtr = spotLights->memory<SpotLight*>();
-
-        //spotLightsPtr[0] = {
-        //    .position = { -0.5f, 1.3f, 0.0f },
-        //    .radius = 10.0f,
-        //    .color = glm::vec3 { 1.0f },
-        //    .coneDirection = glm::vec3 { 0.0f, 0.0f, 1.0f },
-        //    .coneAngle = 30.0f,
-        //};
-
-        //spotLights->flush();
     }
 
     Yorna::~Yorna() { device->waitDeviceIdle(); }
@@ -352,7 +324,7 @@ namespace yorna {
     void Yorna::updateCamera(const coffee::graphics::CommandBuffer& commandBuffer)
     {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
-        camera.setReversePerspectiveProjection(glm::radians(80.0f), outputAspect.load(std::memory_order_relaxed));
+        camera.setReversePerspectiveProjection(80.0f, outputAspect.load(std::memory_order_relaxed));
         camera.recalculateFrustumPlanes();
 
         auto& ubo = mvpUniformBuffers[frameIndex]->memory<MVPUniformBuffer>();
@@ -435,28 +407,25 @@ namespace yorna {
     void Yorna::createBuffers()
     {
         pointLights = coffee::graphics::Buffer::create(device, {
-            .instanceSize = sizeof(PointLight),
+            .instanceSize = static_cast<uint32_t>(sizeof(PointLight)),
             .instanceCount = kMaxAmountOfPointLights,
             .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             .allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
             .allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
 
         spotLights = coffee::graphics::Buffer::create(device, {
-            .instanceSize = sizeof(SpotLight),
+            .instanceSize = static_cast<uint32_t>(sizeof(SpotLight)),
             .instanceCount = kMaxAmountOfSpotLights,
             .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+            .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             .allocationFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
             .allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST
         });
 
         std::memset(pointLights->memory(), 0, kMaxAmountOfPointLights * sizeof(PointLight));
         std::memset(spotLights->memory(), 0, kMaxAmountOfSpotLights * sizeof(SpotLight));
-
-        pointLights->flush();
-        spotLights->flush();
     }
 
     void Yorna::createSamplers()
