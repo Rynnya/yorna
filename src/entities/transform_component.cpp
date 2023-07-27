@@ -1,8 +1,52 @@
 #include <entities/transform_component.hpp>
 
+#include <glm/gtc/epsilon.hpp>
+
 #include <utility>
+#include <glm/gtx/matrix_decompose.hpp>
 
 namespace yorna {
+
+    void TransformComponent::decompose(glm::mat4 transformationMatrix) noexcept
+    {
+        constexpr float kZeroFloat = 0.0f;
+        constexpr float kOneFloat = 1.0f;
+
+        if (glm::epsilonEqual(transformationMatrix[3][3], kZeroFloat, glm::epsilon<float>())) {
+            return;
+        }
+
+        const bool firstRowNonEmpty = glm::epsilonNotEqual(transformationMatrix[0][3], kZeroFloat, glm::epsilon<float>());
+        const bool secondRowNonEmpty = glm::epsilonNotEqual(transformationMatrix[1][3], kZeroFloat, glm::epsilon<float>());
+        const bool thirdRowNonEmpty = glm::epsilonNotEqual(transformationMatrix[2][3], kZeroFloat, glm::epsilon<float>());
+
+        if (firstRowNonEmpty || secondRowNonEmpty || thirdRowNonEmpty) {
+            transformationMatrix[0][3] = kZeroFloat;
+            transformationMatrix[1][3] = kZeroFloat;
+            transformationMatrix[2][3] = kZeroFloat;
+            transformationMatrix[3][3] = kOneFloat;
+        }
+
+        translation = glm::vec3 { transformationMatrix[3] };
+        transformationMatrix[3] = glm::vec4 { kZeroFloat, kZeroFloat, kZeroFloat, transformationMatrix[3].w };
+
+        glm::vec3 row[3] {};
+
+        // Now get scale and shear.
+        for (uint32_t i = 0; i < 3; i++) {
+            for (uint32_t j = 0; j < 3; j++) {
+                row[i][j] = transformationMatrix[i][j];
+            }
+
+            scale[i] = glm::length(row[i]);
+            row[i] = row[i] * kOneFloat / glm::length(row[i]);
+        }
+
+        glm::mat3 tRow { row[0], row[1], row[2] };
+        rotation.x = atan2(-tRow[2][1], glm::sqrt(kOneFloat - tRow[2][1] * tRow[2][1]));
+        rotation.y = atan2(tRow[2][0], tRow[2][2]);
+        rotation.z = atan2(tRow[0][1], tRow[1][1]);
+    }
 
     glm::mat4 TransformComponent::mat4() const noexcept
     {

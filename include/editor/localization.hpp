@@ -68,7 +68,7 @@ namespace yorna {
         SaveProject,
         CloseProject,
         SceneHierarchy,
-        GuizmoViewport,
+        GizmoViewport,
         SceneViewport,
         AssetBrowser,
         KeepAspectRatio,

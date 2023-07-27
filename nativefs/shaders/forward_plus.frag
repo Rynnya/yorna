@@ -34,8 +34,8 @@ layout (set = 0, binding = 2) uniform sampler2D sunlightShadowMap;
 
 layout (set = 0, binding = 3) uniform PointLights { PointLight pointLights[MAX_AMOUNT_OF_POINT_LIGHTS]; };
 layout (set = 0, binding = 4) uniform SpotLights { SpotLight spotLights[MAX_AMOUNT_OF_SPOT_LIGHTS]; };
-layout (set = 0, binding = 5) readonly buffer PointLightIndexList { uint pointLightIndexList[]; };
-layout (set = 0, binding = 6) readonly buffer SpotLightIndexList { uint spotLightIndexList[]; };
+layout (set = 0, binding = 5, std430) readonly buffer PointLightIndexList { uint pointLightIndexList[]; };
+layout (set = 0, binding = 6, std430) readonly buffer SpotLightIndexList { uint spotLightIndexList[]; };
 layout (set = 0, binding = 7, rg32ui) uniform readonly uimage2D pointLightGrid;
 layout (set = 0, binding = 8, rg32ui) uniform readonly uimage2D spotLightGrid;
 

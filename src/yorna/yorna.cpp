@@ -10,11 +10,6 @@
 
 namespace yorna {
 
-    static constexpr std::array<VkClearValue, 2> kNormalClearValues = { VkClearValue { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
-                                                                        VkClearValue { .depthStencil = { 0.0f, 0U } } };
-
-    static constexpr std::array<VkClearValue, 1> kDepthClearValues = { VkClearValue { .depthStencil = { 0.0f, 0U } } };
-
     Yorna::Yorna(const SharedInstance& instance, coffee::LoopHandler& loopHandler)
         : SharedInstance { instance }
         , loopHandler { loopHandler }
@@ -35,6 +30,23 @@ namespace yorna {
         createDescriptors();
         createSyncObjects();
         loadModels();
+
+        std::random_device rngDevice {};
+        std::mt19937_64 rngEngine { rngDevice() };
+
+        std::uniform_real_distribution<float> positionDist { -15.0f, 15.0f };
+        std::uniform_real_distribution<float> heightDist { -3.0f, 12.0f };
+        std::uniform_real_distribution<float> colorDist { 0.3f, 0.8f };
+
+        auto* pointLightsArray = pointLights->memory<PointLight*>();
+
+        for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
+            pointLightsArray[index] = {
+                .position = { positionDist(rngEngine), heightDist(rngEngine), positionDist(rngEngine) },
+                .radius = 2.0f,
+                .color = { colorDist(rngEngine), colorDist(rngEngine), colorDist(rngEngine) },
+            };
+        }
     }
 
     Yorna::~Yorna() { device->waitDeviceIdle(); }
@@ -53,49 +65,60 @@ namespace yorna {
     {
         auto commandBuffer = coffee::graphics::CommandBuffer::createTransfer(device);
 
-        completionFences[frameIndex]->wait();
-        completionFences[frameIndex]->reset();
-
         updateObjects(commandBuffer);
         updateLights(commandBuffer);
         cullMeshes();
+
+        completionFences[frameIndex]->wait();
+        completionFences[frameIndex]->reset();
 
         device->submit(std::move(commandBuffer), submitUpdateUBOSemaphores[frameIndex]);
     }
 
     void Yorna::cullMeshes()
     {
-        auto& meshes = model->model->meshes;
-        auto& visibleMeshes = model->visibleMeshes;
-        auto transformationMatrix = model->transform.mat4();
+        for (auto& model : models) {
+            auto& meshes = model->model->meshes;
+            auto& visibleMeshes = model->visibleMeshes;
+            auto transformationMatrix = model->transform.mat4();
 
-        visibleMeshes.clear();
+            visibleMeshes.clear();
 
-        for (size_t i = 0; i < meshes.size(); i++) {
-            if (camera.isInFrustum(transformationMatrix, meshes[i].aabb)) {
-                visibleMeshes.push_back(i);
+            for (size_t i = 0; i < meshes.size(); i++) {
+                if (camera.isInFrustum(transformationMatrix, meshes[i].aabb)) {
+                    visibleMeshes.push_back(i);
+                }
             }
         }
     }
 
     void Yorna::performDepthTest(const coffee::graphics::CommandBuffer& commandBuffer)
     {
-        auto& meshes = model->model->meshes;
-        auto& visibleMeshes = model->visibleMeshes;
-        auto transformationMatrix = model->transform.mat4();
-
         sunlightShadow.begin(commandBuffer);
-        sunlightShadow.push(commandBuffer, transformationMatrix);
-        commandBuffer.bindModel(model->model);
-        commandBuffer.drawModel(model->model);
+
+        for (auto& model : models) {
+            auto& meshes = model->model->meshes;
+            auto& visibleMeshes = model->visibleMeshes;
+
+            sunlightShadow.push(commandBuffer, model->transform.mat4());
+            commandBuffer.bindModel(model->model);
+            commandBuffer.drawModel(model->model);
+        }
+
         sunlightShadow.end(commandBuffer);
 
         earlyDepth.begin(commandBuffer);
-        earlyDepth.push(commandBuffer, transformationMatrix);
-        commandBuffer.bindModel(model->model);
 
-        for (size_t meshID : visibleMeshes) {
-            commandBuffer.drawMesh(meshes[meshID]);
+        for (auto& model : models) {
+            auto& meshes = model->model->meshes;
+            auto& visibleMeshes = model->visibleMeshes;
+
+            earlyDepth.push(commandBuffer, model->transform.mat4());
+            commandBuffer.bindModel(model->model);
+
+            for (size_t meshID : visibleMeshes) {
+                commandBuffer.drawMesh(meshes[meshID]);
+            }
         }
 
         earlyDepth.end(commandBuffer);
@@ -203,7 +226,7 @@ namespace yorna {
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
                 .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
-                .image = lightCulling.pointLightGrids[lightCulling.currentFrame()]->image(),
+                .image = lightCulling.pointLightGrid->image(),
                 .subresourceRange = colorResource
             };
 
@@ -215,7 +238,7 @@ namespace yorna {
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
                 .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
-                .image = lightCulling.spotLightGrids[lightCulling.currentFrame()]->image(),
+                .image = lightCulling.spotLightGrid->image(),
                 .subresourceRange = colorResource
             };
 
@@ -236,10 +259,6 @@ namespace yorna {
 
     void Yorna::performRendering(const coffee::graphics::CommandBuffer& commandBuffer)
     {
-        auto& meshes = model->model->meshes;
-        auto& visibleMeshes = model->visibleMeshes;
-        auto transformationMatrix = model->transform.mat4();
-
         if (!device->isUnifiedGraphicsComputeQueue()) {
             VkImageSubresourceRange depthResource {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -279,7 +298,7 @@ namespace yorna {
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
                 .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
-                .image = lightCulling.pointLightGrids[lightCulling.currentFrame()]->image(),
+                .image = lightCulling.pointLightGrid->image(),
                 .subresourceRange = colorResource
             };
 
@@ -291,7 +310,7 @@ namespace yorna {
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = device->computeQueueFamilyIndex(),
                 .dstQueueFamilyIndex = device->graphicsQueueFamilyIndex(),
-                .image = lightCulling.spotLightGrids[lightCulling.currentFrame()]->image(),
+                .image = lightCulling.spotLightGrid->image(),
                 .subresourceRange = colorResource
             };
 
@@ -305,12 +324,19 @@ namespace yorna {
         }
 
         forwardPlus.begin(commandBuffer);
-        forwardPlus.push(commandBuffer, transformationMatrix, model->transform.normal());
-        commandBuffer.bindModel(model->model);
 
-        for (size_t meshID : visibleMeshes) {
-            forwardPlus.bind(commandBuffer, model->descriptors[meshID]);
-            commandBuffer.drawMesh(meshes[meshID]);
+        for (auto& model : models) {
+            auto& meshes = model->model->meshes;
+            auto& visibleMeshes = model->visibleMeshes;
+            auto transformationMatrix = model->transform.mat4();
+
+            forwardPlus.push(commandBuffer, transformationMatrix, model->transform.normal());
+            commandBuffer.bindModel(model->model);
+
+            for (size_t meshID : visibleMeshes) {
+                forwardPlus.bind(commandBuffer, model->descriptors[meshID]);
+                commandBuffer.drawMesh(meshes[meshID]);
+            }
         }
 
         forwardPlus.end(commandBuffer);
@@ -381,6 +407,16 @@ namespace yorna {
 
     void Yorna::updateLights(const coffee::graphics::CommandBuffer& commandBuffer)
     {
+        auto* pointLightsArray = pointLights->memory<PointLight*>();
+
+        for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
+            pointLightsArray[index].position.y += 1.4f * loopHandler.deltaTime();
+
+            if (pointLightsArray[index].position.y > 12.0f) {
+                pointLightsArray[index].position.y -= 12.0f;
+            }
+        }
+
         constexpr VkBufferCopy pointLightCopyRegion { .srcOffset = 0, .dstOffset = 0, .size = kMaxAmountOfPointLights * sizeof(PointLight) };
         commandBuffer.copyBuffer(pointLights, lightCulling.pointLightsBuffers[lightCulling.currentFrame()], 1, &pointLightCopyRegion);
 
@@ -491,7 +527,7 @@ namespace yorna {
 
     void Yorna::loadModels()
     {
-        model = std::make_unique<Model>(device, assetManager->getModel(filesystem, "sponza_scene.cfa"), textureSampler);
+        models.push_back(std::make_unique<Model>(device, assetManager->getModel(filesystem, "sponza_scene.cfa"), textureSampler));
 
         device->waitDeviceIdle();
 

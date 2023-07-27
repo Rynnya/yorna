@@ -40,10 +40,14 @@ namespace yorna {
                 layout
             },
             .inputBindings = { coffee::graphics::InputBinding {
-                .binding = 0U,
+                .binding = 0,
                 .stride = sizeof(coffee::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-                .elements = coffee::Vertex::getElementDescriptions()
+                .elements = { coffee::graphics::InputElement {
+                    .location = 0U,
+                    .format = VK_FORMAT_R32G32B32_SFLOAT,
+                    .offset = offsetof(coffee::Vertex, position),
+                }},
             }},
             .rasterizationInfo = {
                 .cullMode = VK_CULL_MODE_BACK_BIT

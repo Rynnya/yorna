@@ -13,13 +13,13 @@ layout (set = 0, binding = 1, std430) readonly buffer InputFrustums { Frustum in
 layout (set = 0, binding = 2) uniform InputPointLights { PointLight pointLights[MAX_AMOUNT_OF_POINT_LIGHTS]; };
 layout (set = 0, binding = 3) uniform InputSpotLights { SpotLight spotLights[MAX_AMOUNT_OF_SPOT_LIGHTS]; };
 
-layout (set = 0, binding = 4) writeonly buffer OutputIndexCounters {
+layout (set = 0, binding = 4, std430) writeonly buffer OutputIndexCounters {
     uint pointLightIndexCounter;
     uint spotLightIndexCounter;
 };
 
-layout (set = 0, binding = 5) writeonly buffer OutputPointLightIndexList { uint pointLightIndexList[]; };
-layout (set = 0, binding = 6) writeonly buffer OutputSpotLightIndexList { uint spotLightIndexList[]; };
+layout (set = 0, binding = 5, std430) writeonly buffer OutputPointLightIndexList { uint pointLightIndexList[]; };
+layout (set = 0, binding = 6, std430) writeonly buffer OutputSpotLightIndexList { uint spotLightIndexList[]; };
 layout (set = 0, binding = 7, rg32ui) uniform writeonly uimage2D pointLightGrid;
 layout (set = 0, binding = 8, rg32ui) uniform writeonly uimage2D spotLightGrid;
 
@@ -43,17 +43,17 @@ shared uint gOpaqueSpotLightList[MAX_AMOUNT_OF_SPOT_LIGHTS];
 void appendOpaquePointLight(uint lightIndex) {
     uint index = atomicAdd(gOpaquePointLightCount, 1);
     
-    if (index < MAX_AMOUNT_OF_POINT_LIGHTS) {
+    //if (index < MAX_AMOUNT_OF_POINT_LIGHTS) {
         gOpaquePointLightList[index] = lightIndex;
-    }
+    //}
 }
 
 void appendOpaqueSpotLight(uint lightIndex) {
     uint index = atomicAdd(gOpaqueSpotLightCount, 1);
     
-    if (index < MAX_AMOUNT_OF_SPOT_LIGHTS) {
+    //if (index < MAX_AMOUNT_OF_SPOT_LIGHTS) {
         gOpaqueSpotLightList[index] = lightIndex;
-    }
+    //}
 }
 
 void main() {

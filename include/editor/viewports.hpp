@@ -3,9 +3,15 @@
 
 #include <editor/entities.hpp>
 #include <entities/transform_component.hpp>
+#include <yorna/shared_instance.hpp>
 
-#include <ImGuizmo.h>
+#include <coffee/graphics/descriptors.hpp>
+#include <coffee/graphics/framebuffer.hpp>
+#include <coffee/graphics/graphics_pipeline.hpp>
+#include <coffee/graphics/render_pass.hpp>
 #include <coffee/interfaces/filesystem.hpp>
+
+#include <Imguizmo.h>
 #include <imgui_file_dialog.h>
 
 #include <filesystem>
@@ -43,6 +49,7 @@ namespace yorna {
         static constexpr uint32_t kAverageStatisticBufferSize = 32;
         static constexpr int32_t kInvalidHeapIndex = -1;
 
+        bool cameraCaptured = false;
         bool keepAspectRatio = false;
         bool outputFramerateAndFPS = false;
 
@@ -63,10 +70,22 @@ namespace yorna {
         ImVec2 framerateTextPosition {};
     };
 
-    struct GuizmoViewport : Viewport {
-        ImGuizmo::OPERATION operation = ImGuizmo::OPERATION::TRANSLATE;
-        ImGuizmo::MODE mode = ImGuizmo::MODE::WORLD;
+    struct GizmoViewport : Viewport {
+        ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE;
+
         TransformComponent* affectedModel = nullptr;
+        bool waitingForModelSelection = false;
+
+        coffee::graphics::BufferPtr pickingOutput {};
+        coffee::graphics::RenderPassPtr renderPass {};
+        coffee::graphics::DescriptorLayoutPtr layout {};
+        PerFlightFrame<coffee::graphics::DescriptorSetPtr> descriptors {};
+        coffee::graphics::GraphicsPipelinePtr pipeline {};
+        coffee::graphics::FencePtr completionFence {};
+
+        coffee::graphics::ImagePtr depthImage {};
+        coffee::graphics::ImageViewPtr depthImageView {};
+        coffee::graphics::FramebufferPtr framebuffer {};
     };
 
     struct DirectoryObject {

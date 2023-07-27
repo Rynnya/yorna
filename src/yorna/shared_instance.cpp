@@ -14,7 +14,7 @@ namespace yorna {
             // clang-format off
             mvpUniformBuffer = coffee::graphics::Buffer::create(device, {
                 .instanceSize = static_cast<uint32_t>(sizeof(MVPUniformBuffer)),
-                .instanceCount = 1,
+                .instanceCount = 1U,
                 .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,

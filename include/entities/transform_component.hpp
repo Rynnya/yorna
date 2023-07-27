@@ -12,6 +12,8 @@ namespace yorna {
         glm::vec3 scale { 1.0f, 1.0f, 1.0f };
         glm::vec3 rotation {};
 
+        void decompose(glm::mat4 transformationMatrix) noexcept;
+
         glm::mat4 mat4() const noexcept;
         glm::mat3 normal() const noexcept;
     };

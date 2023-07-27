@@ -11,17 +11,34 @@
 
 namespace yorna {
 
-    class Editor {
+    class Editor : SharedInstance {
     public:
-        Editor(const coffee::graphics::DevicePtr& device, yorna::Yorna& gameHandle) noexcept;
+        struct MousePickingPushConstants {
+            glm::mat4 modelMatrix;
+            uint32_t objectID;
+        };
+
+        struct UpdateInformation {
+            bool modelWasChanged = false;
+            glm::mat4 transformationMatrix { 1.0f };
+        };
+
+        Editor(const SharedInstance& instance, yorna::Yorna& gameHandle) noexcept;
         ~Editor() noexcept = default;
 
+        // Changes state in single-threaded mode so no race condition is done
+        void update();
+        // Should not change game state directly, instead use update() method
         void render();
         void updateAverageTimings(float deltaTime, float imguiTiming, QueryTimestamps& queryTimestamps);
 
-        coffee::graphics::DescriptorSetPtr framebufferImage = nullptr;
-
     private:
+        void initializeLights();
+        void initializeMemoryHeaps();
+        void initializeMousePicking();
+
+        void resizeMousePicking();
+
         void createProject();
         void loadProject();
         void loadAssetDirectory();
@@ -34,6 +51,10 @@ namespace yorna {
         void removeChilds(entt::entity childEntity);
         void drawHierarchyTree(entt::entity entity);
 
+        void doMousePicking(const ImVec2& currentCursorPosition);
+        void boundViewportToGame(ImGuiViewport* viewport);
+        void unboundViewportFromGame(ImGuiViewport* viewport);
+
         void acquirePointLightIndex(entt::entity entity);
         void releasePointLightIndex(entt::entity entity);
         void acquireSpotLightIndex(entt::entity entity);
@@ -42,13 +63,14 @@ namespace yorna {
         void outputFramerateInfo(const std::string_view& name, const float (&buffer)[SceneViewport::kAverageStatisticBufferSize]);
         void outputMemoryUsage(const std::array<VmaBudget, VK_MAX_MEMORY_HEAPS>& budgets, const std::string_view& name, int32_t heapIndex);
 
-        coffee::graphics::DevicePtr device;
         yorna::Yorna& gameHandle;
+        coffee::graphics::DescriptorSetPtr framebufferImage {};
+        UpdateInformation updateInformation {};
 
         ProjectInformation projectInformation {};
-        HierarchyViewport sceneHierarchy {};
-        GuizmoViewport guizmoViewport {};
-        SceneViewport sceneViewport {};
+        HierarchyViewport hierarchy {};
+        GizmoViewport gizmo {};
+        SceneViewport scene {};
         AssetBrowserViewport assetBrowser {};
 
         std::array<bool, Yorna::kMaxAmountOfPointLights> freePointLightIndices {};

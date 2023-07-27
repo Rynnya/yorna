@@ -38,6 +38,8 @@ namespace yorna {
         const coffee::graphics::DevicePtr& device;
     };
 
+    using ModelPtr = std::unique_ptr<Model>;
+
 } // namespace yorna
 
 #endif

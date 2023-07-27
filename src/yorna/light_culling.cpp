@@ -142,24 +142,14 @@ namespace yorna {
         constexpr float kBlockSizeAsFloat = static_cast<float>(kFrustumBlockSize);
         frustumsCommandBuffer.dispatch(glm::ceil(widthInTiles / kBlockSizeAsFloat), glm::ceil(heightInTiles / kBlockSizeAsFloat), 1);
 
-        device->submit(std::move(frustumsCommandBuffer), {}, frustumsCompletionFence, true);
-
-        std::array<VkImageMemoryBarrier, 2U * coffee::graphics::Device::kMaxOperationsInFlight> layoutBarriers {};
+        device->submit(std::move(frustumsCommandBuffer), {}, frustumsCompletionFence);
 
         for (size_t index = 0; index < coffee::graphics::Device::kMaxOperationsInFlight; index++) {
             auto& pointLightIndexList = pointLightIndexLists[index];
             auto& spotLightIndexList = spotLightIndexLists[index];
-            auto& pointLightGrid = pointLightGrids[index];
-            auto& spotLightGrid = spotLightGrids[index];
-            auto& pointLightGridView = pointLightGridViews[index];
-            auto& spotLightGridView = spotLightGridViews[index];
 
             pointLightIndexList = nullptr;
             spotLightIndexList = nullptr;
-            pointLightGrid = nullptr;
-            spotLightGrid = nullptr;
-            pointLightGridView = nullptr;
-            spotLightGridView = nullptr;
 
             pointLightIndexList = coffee::graphics::Buffer::create(device, {
                 .instanceSize = static_cast<uint32_t>(sizeof(uint32_t)),
@@ -176,69 +166,76 @@ namespace yorna {
                 .memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 .allocationUsage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE
             });
-
-            pointLightGrid = coffee::graphics::Image::create(device, {
-                .imageType = VK_IMAGE_TYPE_2D,
-                .format = VK_FORMAT_R32G32_UINT,
-                .extent = { .width = widthInTiles, .height = heightInTiles },
-                .usage = VK_IMAGE_USAGE_STORAGE_BIT
-            });
-
-            pointLightGridView = coffee::graphics::ImageView::create(pointLightGrid, {
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = VK_FORMAT_R32G32_UINT
-            });
-
-            spotLightGrid = coffee::graphics::Image::create(device, {
-                .imageType = VK_IMAGE_TYPE_2D,
-                .format = VK_FORMAT_R32G32_UINT,
-                .extent = { .width = widthInTiles, .height = heightInTiles },
-                .usage = VK_IMAGE_USAGE_STORAGE_BIT
-            });
-
-            spotLightGridView = coffee::graphics::ImageView::create(spotLightGrid, {
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = VK_FORMAT_R32G32_UINT
-            });
-
-            layoutBarriers[index * coffee::graphics::Device::kMaxOperationsInFlight + 0] = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = 0,
-                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = pointLightGrid->image(),
-                .subresourceRange = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                }
-            };
-
-            layoutBarriers[index * coffee::graphics::Device::kMaxOperationsInFlight + 1] = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .srcAccessMask = 0,
-                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = spotLightGrid->image(),
-                .subresourceRange = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                }
-            };
         }
 
+        pointLightGrid = nullptr;
+        spotLightGrid = nullptr;
+        pointLightGridView = nullptr;
+        spotLightGridView = nullptr;
+
+        pointLightGrid = coffee::graphics::Image::create(device, {
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R32G32_UINT,
+            .extent = { .width = widthInTiles, .height = heightInTiles },
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT
+        });
+
+        pointLightGridView = coffee::graphics::ImageView::create(pointLightGrid, {
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = VK_FORMAT_R32G32_UINT
+        });
+
+        spotLightGrid = coffee::graphics::Image::create(device, {
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R32G32_UINT,
+            .extent = { .width = widthInTiles, .height = heightInTiles },
+            .usage = VK_IMAGE_USAGE_STORAGE_BIT
+        });
+
+        spotLightGridView = coffee::graphics::ImageView::create(spotLightGrid, {
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = VK_FORMAT_R32G32_UINT
+        });
+
         auto layoutTranslationCommandBuffer = coffee::graphics::CommandBuffer::createCompute(device);
+
+        std::array<VkImageMemoryBarrier, 2> layoutBarriers {};
+
+        layoutBarriers[0] = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = pointLightGrid->image(),
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
+
+        layoutBarriers[1] = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = spotLightGrid->image(),
+            .subresourceRange = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1
+            }
+        };
 
         layoutTranslationCommandBuffer.imagePipelineBarrier(
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -248,7 +245,7 @@ namespace yorna {
             layoutBarriers.data()
         );
 
-        device->submit(std::move(layoutTranslationCommandBuffer), {}, layoutTranslationFence, true);
+        device->submit(std::move(layoutTranslationCommandBuffer), {}, layoutTranslationFence);
 
         for (size_t index = 0; index < coffee::graphics::Device::kMaxOperationsInFlight; index++) {
             auto& lightCullingDescriptor = lightCullingDescriptors[index];
@@ -262,8 +259,8 @@ namespace yorna {
                 writer.addBuffer(4, indexCounters[index]);
                 writer.addBuffer(5, pointLightIndexLists[index]);
                 writer.addBuffer(6, spotLightIndexLists[index]);
-                writer.addImage (7, VK_IMAGE_LAYOUT_GENERAL, pointLightGridViews[index]);
-                writer.addImage (8, VK_IMAGE_LAYOUT_GENERAL, spotLightGridViews[index]);
+                writer.addImage (7, VK_IMAGE_LAYOUT_GENERAL, pointLightGridView);
+                writer.addImage (8, VK_IMAGE_LAYOUT_GENERAL, spotLightGridView);
 
                 lightCullingDescriptor = coffee::graphics::DescriptorSet::create(device, writer);
             }
@@ -271,12 +268,18 @@ namespace yorna {
                 writer.addImage (0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, earlyDepth.view, depthSampler);
                 writer.addBuffer(5, pointLightIndexLists[index]);
                 writer.addBuffer(6, spotLightIndexLists[index]);
-                writer.addImage (7, VK_IMAGE_LAYOUT_GENERAL, pointLightGridViews[index]);
-                writer.addImage (8, VK_IMAGE_LAYOUT_GENERAL, spotLightGridViews[index]);
+                writer.addImage (7, VK_IMAGE_LAYOUT_GENERAL, pointLightGridView);
+                writer.addImage (8, VK_IMAGE_LAYOUT_GENERAL, spotLightGridView);
 
                 lightCullingDescriptor->update(writer);
             }
         }
+
+        frustumsCompletionFence->wait();
+        frustumsCompletionFence->reset();
+
+        layoutTranslationFence->wait();
+        layoutTranslationFence->reset();
     }
 
     // clang-format on

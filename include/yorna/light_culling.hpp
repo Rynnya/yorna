@@ -25,13 +25,13 @@ namespace yorna {
 
         PerFlightFrame<coffee::graphics::BufferPtr> pointLightsBuffers;
         PerFlightFrame<coffee::graphics::BufferPtr> spotLightsBuffers;
-
         PerFlightFrame<coffee::graphics::BufferPtr> pointLightIndexLists;
         PerFlightFrame<coffee::graphics::BufferPtr> spotLightIndexLists;
-        PerFlightFrame<coffee::graphics::ImagePtr> pointLightGrids;
-        PerFlightFrame<coffee::graphics::ImagePtr> spotLightGrids;
-        PerFlightFrame<coffee::graphics::ImageViewPtr> pointLightGridViews;
-        PerFlightFrame<coffee::graphics::ImageViewPtr> spotLightGridViews;
+
+        coffee::graphics::ImagePtr pointLightGrid;
+        coffee::graphics::ImagePtr spotLightGrid;
+        coffee::graphics::ImageViewPtr pointLightGridView;
+        coffee::graphics::ImageViewPtr spotLightGridView;
 
         const uint32_t kAmountOfPointLights;
         const uint32_t kAmountOfSpotLights;

@@ -2987,7 +2987,6 @@ namespace yorna {
             }
 
             bool windowNoInput = (viewport->Flags & ImGuiViewportFlags_NoInputs) != 0;
-
             windowNoInput ? window->enablePassthrough() : window->disablePassthrough();
 
             if (window->isFocused() && !windowNoInput) {

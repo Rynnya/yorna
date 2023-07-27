@@ -8,32 +8,28 @@
 
 int main()
 {
-    auto gpuDevice = coffee::graphics::Device::create();
+    auto gpuDevice = coffee::graphics::Device::create({ .fragmentStoresAndAtomics = true });
     yorna::SharedInstance sharedInstance { gpuDevice };
 
     auto loopHandler = coffee::LoopHandler::create();
     auto window = coffee::graphics::Window::create(gpuDevice, {
         .extent = { .width = 1280, .height = 720, },
-        .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
+        .presentMode = VK_PRESENT_MODE_FIFO_RELAXED_KHR,
         .hiddenOnStart = true,
         .fullscreen = false,
     });
 
     yorna::Yorna gameHandler { sharedInstance, loopHandler };
-    yorna::Editor editor { gpuDevice, gameHandler };
+    yorna::Editor editor { sharedInstance, gameHandler };
     yorna::ImGuiImplementation imguiHandler { gpuDevice, window };
     yorna::QueryTimestamps timestamps { gpuDevice, 3 };
 
     auto gameThreadWork = [&gpuDevice, &gameHandler, &timestamps]() {
-        yorna::ImGuiBackendPlatformData* platformData = static_cast<yorna::ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
-
         auto earlyDepthCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
         auto lightCullingCommandBuffer = coffee::graphics::CommandBuffer::createCompute(gpuDevice);
         auto renderingCommandBuffer = coffee::graphics::CommandBuffer::createGraphics(gpuDevice);
 
         timestamps.resetQueryPool(earlyDepthCommandBuffer);
-        gameHandler.bindWindow(platformData->fullControlWindowPtr);
-        gameHandler.update();
 
         timestamps.writeBeginTimestamp(earlyDepthCommandBuffer, 0);
         gameHandler.performDepthTest(earlyDepthCommandBuffer);
@@ -68,7 +64,13 @@ int main()
         auto loopBeginTime = std::chrono::high_resolution_clock::now();
         float deltaTime = loopHandler.deltaTime();
 
+        yorna::ImGuiBackendPlatformData* platformData = static_cast<yorna::ImGuiBackendPlatformData*>(ImGui::GetIO().BackendPlatformUserData);
+
         imguiHandler.update(deltaTime);
+        editor.update();
+        gameHandler.bindWindow(platformData->fullControlWindowPtr);
+        gameHandler.update();
+
         gameLoopTask.run(gameThreadWork);
         editor.render();
         imguiHandler.render();

@@ -4,7 +4,7 @@
 
 layout (local_size_x = FRUSTUM_BLOCK_SIZE, local_size_y = FRUSTUM_BLOCK_SIZE, local_size_z = 1) in;
 
-layout (std430, binding = 0, set = 0) writeonly buffer OutputFrustums { Frustum outFrustums[]; };
+layout (binding = 0, set = 0, std430) writeonly buffer OutputFrustums { Frustum outFrustums[]; };
 
 layout (push_constant) uniform Push {
     mat4 inverseProjection;

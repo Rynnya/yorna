@@ -19,7 +19,7 @@ namespace yorna {
 
     class Yorna : SharedInstance {
     public:
-        static constexpr size_t kMaxAmountOfPointLights = 128U;
+        static constexpr size_t kMaxAmountOfPointLights = 512U;
         static constexpr size_t kMaxAmountOfSpotLights = 4U;
 
         static_assert(kMaxAmountOfPointLights > 0);
@@ -43,14 +43,18 @@ namespace yorna {
         glm::uvec2 outputViewport { 1920U, 1080U };
         std::atomic<float> outputAspect { 1280.0f / 720.0f };
 
-        coffee::graphics::DescriptorLayoutPtr outputLayout;
-        coffee::graphics::DescriptorSetPtr outputDescriptor;
+        coffee::graphics::DescriptorLayoutPtr outputLayout {};
+        coffee::graphics::DescriptorSetPtr outputDescriptor {};
 
         Camera camera {};
         TransformComponent viewerObject {};
 
-        coffee::graphics::BufferPtr pointLights;
-        coffee::graphics::BufferPtr spotLights;
+        std::vector<ModelPtr> models {};
+        coffee::graphics::BufferPtr pointLights {};
+        coffee::graphics::BufferPtr spotLights {};
+
+        float lookSpeed = 0.003f;
+        float moveSpeed = 10.0f;
 
         void nextFrame() noexcept;
         uint32_t currentFrame() const noexcept;
@@ -89,10 +93,6 @@ namespace yorna {
         PerFlightFrame<coffee::graphics::SubmitSemaphores> submitEarlyDepthSemaphores;
         PerFlightFrame<coffee::graphics::SubmitSemaphores> submitLightCullingSemaphores;
         PerFlightFrame<coffee::graphics::SubmitSemaphores> submitRenderingSemaphores;
-
-        float lookSpeed = 0.003f;
-        float moveSpeed = 10.0f;
-        std::unique_ptr<Model> model;
 
         coffee::graphics::SamplerPtr textureSampler;
         coffee::graphics::SamplerPtr outputSampler;

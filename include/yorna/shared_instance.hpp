@@ -16,7 +16,7 @@ namespace yorna {
 
     class SharedInstance : coffee::NonMoveable {
     public:
-        SharedInstance(const coffee::graphics::DevicePtr& device);
+        explicit SharedInstance(const coffee::graphics::DevicePtr& device);
         SharedInstance(const SharedInstance& instance);
 
         const coffee::graphics::DevicePtr& device;

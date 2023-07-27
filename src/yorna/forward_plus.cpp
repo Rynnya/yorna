@@ -134,8 +134,8 @@ namespace yorna {
             writer.addBuffer(4, lightCulling.spotLightsBuffers[index]);
             writer.addBuffer(5, lightCulling.pointLightIndexLists[index]);
             writer.addBuffer(6, lightCulling.spotLightIndexLists[index]);
-            writer.addImage (7, VK_IMAGE_LAYOUT_GENERAL, lightCulling.pointLightGridViews[index]);
-            writer.addImage (8, VK_IMAGE_LAYOUT_GENERAL, lightCulling.spotLightGridViews[index]);
+            writer.addImage (7, VK_IMAGE_LAYOUT_GENERAL, lightCulling.pointLightGridView);
+            writer.addImage (8, VK_IMAGE_LAYOUT_GENERAL, lightCulling.spotLightGridView);
 
             if (renderingDescriptor == nullptr) {
                 renderingDescriptor = coffee::graphics::DescriptorSet::create(device, writer);

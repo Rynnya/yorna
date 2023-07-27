@@ -4,6 +4,8 @@
 
 namespace yorna {
 
+    // clang-format off
+
     Model::Model(const coffee::graphics::DevicePtr& device, const coffee::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler)
         : model { model }
         , device { device }
@@ -11,7 +13,6 @@ namespace yorna {
         const auto& meshes = model->meshes;
         meshesInformation.resize(meshes.size());
 
-        // clang-format off
         layout = coffee::graphics::DescriptorLayout::create(device, {
             { 0, { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT          } },
             { 1, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
@@ -20,18 +21,17 @@ namespace yorna {
             { 4, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
             { 5, { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT  } },
         });
-        // clang-format on
 
         coffee::graphics::DescriptorWriter writer = coffee::graphics::DescriptorWriter { layout };
 
         for (size_t i = 0; i < meshes.size(); i++) {
-            coffee::graphics::BufferConfiguration bufferConfiguration {};
-            bufferConfiguration.instanceSize = static_cast<uint32_t>(sizeof(MeshInformation));
-            bufferConfiguration.instanceCount = 1U;
-            bufferConfiguration.usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-            bufferConfiguration.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            bufferConfiguration.allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-            meshesInformationBuffers.push_back(coffee::graphics::Buffer::create(device, bufferConfiguration));
+            meshesInformationBuffers.push_back(coffee::graphics::Buffer::create(device, {
+                .instanceSize = static_cast<uint32_t>(sizeof(MeshInformation)),
+                .instanceCount = 1U,
+                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                .memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+                .allocationFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            }));
 
             auto& meshMaterials = meshes[i].materials;
             auto& currentMeshInfo = meshesInformation[i];
@@ -54,6 +54,8 @@ namespace yorna {
 
         updateMeshesInformation();
     }
+
+    // clang-format on
 
     void Model::updateMeshesInformation()
     {
