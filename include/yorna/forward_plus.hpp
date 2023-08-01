@@ -15,6 +15,7 @@ namespace yorna {
         void resize(uint32_t width, uint32_t height);
 
         void begin(const coffee::graphics::CommandBuffer& commandBuffer) const noexcept;
+        void rebind(const coffee::graphics::CommandBuffer& commandBuffer) const noexcept;
         void push(const coffee::graphics::CommandBuffer& commandBuffer, const glm::mat4& transform, const glm::mat4& modelNormal) const noexcept;
         void bind(const coffee::graphics::CommandBuffer& commandBuffer, const coffee::graphics::DescriptorSetPtr& materials) const noexcept;
         void end(const coffee::graphics::CommandBuffer& commandBuffer) const noexcept;
@@ -24,6 +25,7 @@ namespace yorna {
 
         coffee::graphics::ImagePtr image;
         coffee::graphics::ImageViewPtr view;
+        coffee::graphics::RenderPassPtr renderPass;
 
     private:
         struct RenderingPushConstants {
@@ -42,7 +44,6 @@ namespace yorna {
         coffee::graphics::FramebufferPtr framebuffer;
         PerFlightFrame<coffee::graphics::DescriptorSetPtr> descriptors;
 
-        coffee::graphics::RenderPassPtr renderPass;
         coffee::graphics::GraphicsPipelinePtr pipeline;
         coffee::graphics::DescriptorLayoutPtr renderingLayout;
         coffee::graphics::DescriptorLayoutPtr materialsLayout;

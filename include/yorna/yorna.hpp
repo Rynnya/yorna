@@ -10,6 +10,7 @@
 
 #include <yorna/forward_plus.hpp>
 #include <yorna/shared_instance.hpp>
+#include <yorna/skybox.hpp>
 #include <yorna/sunlight_shadow.hpp>
 
 #include <entities/camera.hpp>
@@ -19,7 +20,7 @@ namespace yorna {
 
     class Yorna : SharedInstance {
     public:
-        static constexpr size_t kMaxAmountOfPointLights = 512U;
+        static constexpr size_t kMaxAmountOfPointLights = 16U;
         static constexpr size_t kMaxAmountOfSpotLights = 4U;
 
         static_assert(kMaxAmountOfPointLights > 0);
@@ -83,6 +84,7 @@ namespace yorna {
         SunlightShadow sunlightShadow;
         LightCulling lightCulling;
         ForwardPlus forwardPlus;
+        Skybox skybox;
 
         PerFlightFrame<coffee::graphics::SemaphorePtr> updateUBOSemaphores;
         PerFlightFrame<coffee::graphics::SemaphorePtr> earlyDepthSemaphores;

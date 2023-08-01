@@ -2076,11 +2076,11 @@ namespace yorna {
     {
         ImGuiIO& io = ImGui::GetIO();
 
-        VkExtent2D windowSize = applicationWindow->windowSize();
+        const VkExtent2D& windowSize = applicationWindow->getWindowSize();
         io.DisplaySize = ImVec2 { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
 
         if (windowSize.width > 0 && windowSize.height > 0) {
-            VkExtent2D framebufferSize = applicationWindow->framebufferSize();
+            const VkExtent2D& framebufferSize = applicationWindow->getFramebufferSize();
 
             io.DisplayFramebufferScale = ImVec2 { static_cast<float>(windowSize.width / framebufferSize.width),
                                                   static_cast<float>(windowSize.height / framebufferSize.height) };
@@ -2118,7 +2118,7 @@ namespace yorna {
     {
         for (ImGuiViewportP* viewport : ImGui::GetCurrentContext()->Viewports) {
             if (ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)) {
-                if (!viewportData->windowHandle->isIconified()) {
+                if (!viewportData->windowHandle->isHidden()) {
                     return true;
                 }
             }
@@ -2134,7 +2134,7 @@ namespace yorna {
         ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData);
         ImDrawData* data = viewport->DrawData;
 
-        const uint32_t frameIndex = viewportData->windowHandle->currentImageIndex();
+        const uint32_t frameIndex = viewportData->windowHandle->getPresentIndex();
         float framebufferWidth = data->DisplaySize.x * data->FramebufferScale.x;
         float framebufferHeight = data->DisplaySize.y * data->FramebufferScale.y;
 
@@ -2145,7 +2145,7 @@ namespace yorna {
         // clang-format goes crazy if we place renderArea inside beginRenderPass
         const VkRect2D renderArea = {
             .offset = { .x = 0, .y = 0, },
-            .extent = viewportData->windowHandle->framebufferSize(),
+            .extent = viewportData->windowHandle->getFramebufferSize(),
         };
 
         commandBuffer.beginRenderPass(
@@ -2299,7 +2299,7 @@ namespace yorna {
         ImGuiStyle& style = ImGui::GetStyle();
         style.WindowRounding = 0.0f;
 
-        VkExtent2D windowSize = applicationWindow->windowSize();
+        const VkExtent2D& windowSize = applicationWindow->getWindowSize();
         io.DisplaySize = ImVec2 { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
 
         ImGuiBackendPlatformData* backendData = static_cast<ImGuiBackendPlatformData*>(io.BackendPlatformUserData = new ImGuiBackendPlatformData {});
@@ -2369,7 +2369,7 @@ namespace yorna {
                     ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
                     ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData);
 
-                    const auto& presentImages = viewportData->windowHandle->presentImages();
+                    const auto& presentImages = viewportData->windowHandle->getPresentImages();
                     rendererData->swapChainViews.resize(presentImages.size());
                     rendererData->framebuffers.resize(presentImages.size());
 
@@ -2380,7 +2380,7 @@ namespace yorna {
                         });
 
                         rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
-                            .extent = viewportData->windowHandle->framebufferSize(),
+                            .extent = viewportData->windowHandle->getFramebufferSize(),
                             .colorViews = { rendererData->swapChainViews[i] }
                         });
                     }
@@ -2441,25 +2441,29 @@ namespace yorna {
 
         platformIO.Platform_SetWindowPos = [](ImGuiViewport* viewport, ImVec2 position) {
             ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+
             viewportData->ignoreWindowPositionFrameCount = ImGui::GetFrameCount();
             viewportData->windowHandle->setWindowPosition({ static_cast<int32_t>(position.x), static_cast<int32_t>(position.y) });
         };
 
         platformIO.Platform_GetWindowPos = [](ImGuiViewport* viewport) -> ImVec2 {
             coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
-            VkOffset2D windowPosition = window->windowPosition();
+
+            const VkOffset2D& windowPosition = window->getWindowPosition();
             return { static_cast<float>(windowPosition.x), static_cast<float>(windowPosition.y) };
         };
 
         platformIO.Platform_SetWindowSize = [](ImGuiViewport* viewport, ImVec2 size) {
             ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(viewport->PlatformUserData);
+
             viewportData->ignoreWindowSizeFrameCount = ImGui::GetFrameCount();
             viewportData->windowHandle->setWindowSize({ static_cast<uint32_t>(size.x), static_cast<uint32_t>(size.y) });
         };
 
         platformIO.Platform_GetWindowSize = [](ImGuiViewport* viewport) -> ImVec2 {
             coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
-            VkExtent2D windowSize = window->windowSize();
+
+            const VkExtent2D& windowSize = window->getWindowSize();
             return { static_cast<float>(windowSize.width), static_cast<float>(windowSize.height) };
         };
 
@@ -2472,7 +2476,9 @@ namespace yorna {
         };
 
         platformIO.Platform_GetWindowMinimized = [](ImGuiViewport* viewport) -> bool {
-            return static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle->isIconified();
+            auto* windowHandle = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
+
+            return windowHandle->getWindowState() == coffee::graphics::WindowState::Iconified || windowHandle->isHidden();
         };
 
         platformIO.Platform_SetWindowTitle = [](ImGuiViewport* viewport, const char* str) {
@@ -2488,7 +2494,7 @@ namespace yorna {
             ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(viewport->RendererUserData = new ImGuiRendererData {});
 
             coffee::graphics::Window* window = static_cast<ImGuiViewportData*>(viewport->PlatformUserData)->windowHandle;
-            const auto& presentImages = window->presentImages();
+            const auto& presentImages = window->getPresentImages();
             rendererData->swapChainViews.resize(presentImages.size());
             rendererData->framebuffers.resize(presentImages.size());
 
@@ -2499,7 +2505,7 @@ namespace yorna {
                 });
 
                 rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
-                    .extent = window->framebufferSize(),
+                    .extent = window->getFramebufferSize(),
                     .colorViews = { rendererData->swapChainViews[i] }
                 });
             }
@@ -2537,7 +2543,7 @@ namespace yorna {
             ImGuiViewportData* viewportData = static_cast<ImGuiViewportData*>(ImGui::GetMainViewport()->PlatformUserData);
             ImGuiRendererData* rendererData = static_cast<ImGuiRendererData*>(ImGui::GetMainViewport()->RendererUserData);
 
-            const auto& presentImages = viewportData->windowHandle->presentImages();
+            const auto& presentImages = viewportData->windowHandle->getPresentImages();
             rendererData->swapChainViews.resize(presentImages.size());
             rendererData->framebuffers.resize(presentImages.size());
 
@@ -2548,7 +2554,7 @@ namespace yorna {
                 });
 
                 rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
-                    .extent = viewportData->windowHandle->framebufferSize(),
+                    .extent = viewportData->windowHandle->getFramebufferSize(),
                     .colorViews = { rendererData->swapChainViews[i] }
                 });
             }
@@ -2574,7 +2580,7 @@ namespace yorna {
         createRenderPass();
         createPipeline();
 
-        const auto& presentImages = applicationWindow->presentImages();
+        const auto& presentImages = applicationWindow->getPresentImages();
         rendererData->swapChainViews.resize(presentImages.size());
         rendererData->framebuffers.resize(presentImages.size());
 
@@ -2585,7 +2591,7 @@ namespace yorna {
             });
 
             rendererData->framebuffers[i] = coffee::graphics::Framebuffer::create(backendData->device, backendData->renderPass, {
-                .extent = applicationWindow->framebufferSize(),
+                .extent = applicationWindow->getFramebufferSize(),
                 .colorViews = { rendererData->swapChainViews[i] }
             });
         }
@@ -2832,7 +2838,7 @@ namespace yorna {
 
     void ImGuiImplementation::enterCallback(const coffee::graphics::Window& window, const coffee::WindowEnterEvent& e)
     {
-        if (window.cursorState() == coffee::graphics::CursorState::Disabled) {
+        if (window.getCursorState() == coffee::graphics::CursorState::Disabled) {
             return;
         }
 
@@ -2876,7 +2882,7 @@ namespace yorna {
         float yPosition = e.y;
 
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            VkOffset2D windowPosition = window.windowPosition();
+            const VkOffset2D& windowPosition = window.getWindowPosition();
             xPosition += windowPosition.x;
             yPosition += windowPosition.y;
         }
@@ -2973,10 +2979,10 @@ namespace yorna {
                 }
 
                 if (backendData->windowPtr == nullptr) {
-                    coffee::Float2D mousePosition = window->mousePosition();
+                    coffee::Float2D mousePosition = window->getMousePosition();
 
                     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-                        VkOffset2D windowPosition = window->windowPosition();
+                        const VkOffset2D& windowPosition = window->getWindowPosition();
                         mousePosition.x += windowPosition.x;
                         mousePosition.y += windowPosition.y;
                     }

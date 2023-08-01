@@ -1,6 +1,6 @@
 #include <yorna/sunlight_shadow.hpp>
 
-#include <coffee/objects/vertex.hpp>
+#include <coffee/graphics/vertex.hpp>
 
 namespace yorna {
 
@@ -78,18 +78,22 @@ namespace yorna {
         });
 
         pipeline = coffee::graphics::GraphicsPipeline::create(device, renderPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/shadow_mapping.vert.spv"),
+            .vertexShader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/shadow_mapping.vert.spv",
+                .entrypoint = "main"
+            }),
             .vertexPushConstants = {
                 .size = sizeof(PushConstants)
             },
             .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0,
-                .stride = sizeof(coffee::Vertex),
+                .stride = sizeof(coffee::graphics::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = { coffee::graphics::InputElement {
                     .location = 0U,
                     .format = VK_FORMAT_R32G32B32_SFLOAT,
-                    .offset = offsetof(coffee::Vertex, position),
+                    .offset = offsetof(coffee::graphics::Vertex, position),
                 }},
             }},
             .rasterizationInfo = {

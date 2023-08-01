@@ -1,10 +1,7 @@
 #include <yorna/yorna.hpp>
 
 #include <coffee/coffee.hpp>
-#include <coffee/objects/vertex.hpp>
 #include <coffee/utils/utils.hpp>
-
-#include <imgui.h>
 
 #include <glm/gtc/random.hpp>
 
@@ -17,6 +14,7 @@ namespace yorna {
         , sunlightShadow { instance, 2048U }
         , lightCulling { instance, earlyDepth, kMaxAmountOfPointLights, kMaxAmountOfSpotLights }
         , forwardPlus { instance, earlyDepth, sunlightShadow, lightCulling }
+        , skybox { instance, earlyDepth, forwardPlus }
     {
         camera.setViewYXZ(viewerObject.translation, viewerObject.rotation);
         camera.setReversePerspectiveProjection(80.0f, outputAspect.load(std::memory_order_relaxed));
@@ -44,7 +42,7 @@ namespace yorna {
             pointLightsArray[index] = {
                 .position = { positionDist(rngEngine), heightDist(rngEngine), positionDist(rngEngine) },
                 .radius = 2.0f,
-                .color = { colorDist(rngEngine), colorDist(rngEngine), colorDist(rngEngine) },
+                .color = { colorDist(rngEngine),   colorDist(rngEngine),  colorDist(rngEngine)   },
             };
         }
     }
@@ -65,12 +63,13 @@ namespace yorna {
     {
         auto commandBuffer = coffee::graphics::CommandBuffer::createTransfer(device);
 
-        updateObjects(commandBuffer);
-        updateLights(commandBuffer);
         cullMeshes();
 
         completionFences[frameIndex]->wait();
         completionFences[frameIndex]->reset();
+
+        updateObjects(commandBuffer);
+        updateLights(commandBuffer);
 
         device->submit(std::move(commandBuffer), submitUpdateUBOSemaphores[frameIndex]);
     }
@@ -324,6 +323,8 @@ namespace yorna {
         }
 
         forwardPlus.begin(commandBuffer);
+        skybox.perform(commandBuffer);
+        forwardPlus.rebind(commandBuffer);
 
         for (auto& model : models) {
             auto& meshes = model->model->meshes;
@@ -527,9 +528,11 @@ namespace yorna {
 
     void Yorna::loadModels()
     {
-        models.push_back(std::make_unique<Model>(device, assetManager->getModel(filesystem, "sponza_scene.cfa"), textureSampler));
+        coffee::ModelLoadingInfo loadingInfo { filesystem };
+        loadingInfo.path = "sponza_scene.cfa";
 
-        device->waitDeviceIdle();
+        models.push_back(std::make_unique<Model>(device, assetManager->loadModel(loadingInfo), textureSampler));
+        models.back()->transform.scale *= 0.01f;
 
         viewerObject.translation.z = -1.5f;
         viewerObject.translation.y = 1.0f;
@@ -547,11 +550,11 @@ namespace yorna {
 
     void Yorna::mousePositionCallback(const coffee::graphics::Window& window, const coffee::MouseMoveEvent& e) noexcept
     {
-        if (window.cursorState() != coffee::graphics::CursorState::Disabled) {
+        if (window.getCursorState() != coffee::graphics::CursorState::Disabled) {
             return;
         }
 
-        coffee::Float2D mousePosition = window.mousePosition();
+        const coffee::Float2D& mousePosition = window.getMousePosition();
         viewerObject.rotation.x = glm::clamp(viewerObject.rotation.x + lookSpeed * (e.y - mousePosition.y), -1.5f, 1.5f);
         viewerObject.rotation.y = glm::mod(viewerObject.rotation.y + lookSpeed * (e.x - mousePosition.x), glm::two_pi<float>());
     }
@@ -559,12 +562,6 @@ namespace yorna {
     void Yorna::keyCallback(const coffee::graphics::Window& window, const coffee::KeyEvent& e) noexcept
     {
         switch (e.key) {
-            case coffee::Keys::Escape:
-                window.showCursor();
-                break;
-            case coffee::Keys::Enter:
-                window.showCursor();
-                break;
             case coffee::Keys::W:
             case coffee::Keys::A:
             case coffee::Keys::S:

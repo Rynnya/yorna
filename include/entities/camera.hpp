@@ -1,7 +1,7 @@
 #ifndef YORNA_ENTITIES_CAMERA
 #define YORNA_ENTITIES_CAMERA
 
-#include <coffee/objects/aabb.hpp>
+#include <coffee/graphics/aabb.hpp>
 
 #include <glm/glm.hpp>
 
@@ -31,7 +31,7 @@ namespace yorna {
         void setViewYXZ(const glm::vec3& position, const glm::vec3& rotation);
 
         void recalculateFrustumPlanes() noexcept;
-        bool isInFrustum(const glm::mat4& modelMatrix, const coffee::AABB& aabb) const noexcept;
+        bool isInFrustum(const glm::mat4& modelMatrix, const coffee::graphics::AABB& aabb) const noexcept;
 
         const glm::mat4& projection() const noexcept;
         const glm::mat4& view() const noexcept;

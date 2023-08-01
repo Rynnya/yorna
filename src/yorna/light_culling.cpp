@@ -17,7 +17,11 @@ namespace yorna {
         });
 
         frustumsPipeline = coffee::graphics::ComputePipeline::create(device, {
-            .shader = assetManager->getShader(filesystem, "shaders/calculate_frustums.comp.spv"),
+            .shader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/calculate_frustums.comp.spv",
+                .entrypoint = "main"
+            }),
             .pushConstants = {
                 .size = sizeof(FrustumCalculationPushConstants)
             },
@@ -75,7 +79,11 @@ namespace yorna {
         });
 
         lightCullingPipeline = coffee::graphics::ComputePipeline::create(device, {
-            .shader = assetManager->getShader(filesystem, "shaders/light_culling.comp.spv"),
+            .shader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/light_culling.comp.spv",
+                .entrypoint = "main"
+            }),
             .pushConstants = {
                 .size = sizeof(LightCullingPushConstants)
             },

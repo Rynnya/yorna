@@ -20,11 +20,11 @@ namespace yorna {
 
     class Model {
     public:
-        Model(const coffee::graphics::DevicePtr& device, const coffee::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler);
+        Model(const coffee::graphics::DevicePtr& device, const coffee::graphics::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler);
 
         void updateMeshesInformation();
 
-        coffee::ModelPtr model {};
+        coffee::graphics::ModelPtr model {};
         TransformComponent transform {};
         std::vector<size_t> visibleMeshes {};
 

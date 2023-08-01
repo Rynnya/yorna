@@ -5,7 +5,7 @@
 #include <editor/localization.hpp>
 #include <entities/light_objects.hpp>
 
-#include <coffee/objects/vertex.hpp>
+#include <coffee/graphics/vertex.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <Imguizmo.h>
@@ -407,8 +407,16 @@ namespace yorna {
         }
 
         gizmo.pipeline = coffee::graphics::GraphicsPipeline::create(device, gizmo.renderPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/mouse_picking.vert.spv"),
-            .fragmentShader = assetManager->getShader(filesystem, "shaders/mouse_picking.frag.spv"),
+            .vertexShader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/mouse_picking.vert.spv",
+                .entrypoint = "main"
+            }),
+            .fragmentShader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/mouse_picking.frag.spv",
+                .entrypoint = "main"
+            }),
             .vertexPushConstants = {
                 .size = sizeof(MousePickingPushConstants),
                 .offset = 0ULL
@@ -418,12 +426,12 @@ namespace yorna {
             },
             .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0,
-                .stride = sizeof(coffee::Vertex),
+                .stride = sizeof(coffee::graphics::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = { coffee::graphics::InputElement {
                     .location = 0U,
                     .format = VK_FORMAT_R32G32B32_SFLOAT,
-                    .offset = offsetof(coffee::Vertex, position),
+                    .offset = offsetof(coffee::graphics::Vertex, position),
                 }},
             }},
             .inputAssembly = {

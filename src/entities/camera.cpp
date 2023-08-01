@@ -169,14 +169,14 @@ namespace yorna {
         }
     }
 
-    bool Camera::isInFrustum(const glm::mat4& modelMatrix, const coffee::AABB& aabb) const noexcept
+    bool Camera::isInFrustum(const glm::mat4& modelMatrix, const coffee::graphics::AABB& aabb) const noexcept
     {
-        coffee::AABBPoints points = aabb.transform(modelMatrix);
+        coffee::graphics::AABBPoints points = aabb.transform(modelMatrix);
 
         for (size_t i = 0; i < kAmountOfPlanes; i++) {
             bool inside = false;
 
-            for (size_t j = 0; j < coffee::AABBPoints::kAmountOfPoints; j++) {
+            for (size_t j = 0; j < coffee::graphics::AABBPoints::kAmountOfPoints; j++) {
                 if (glm::dot(frustumPlanes_[i], points[j]) > 0.0f) {
                     inside = true;
                     break;

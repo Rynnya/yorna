@@ -146,7 +146,7 @@ vec3 calculatePBR(PBRData data) {
         vec3 directionToLight = vec3(lightUbo.spotLights[i].position) - fragPosWorld;
         float lightToSurfaceAngle = acos(dot(-normalize(directionToLight), normalize(vec3(lightUbo.spotLights[i].coneDirection))));
 
-        if (lightToSurfaceAngle <= lightUbo.spotLights[i].coneDirection.w) {
+        if (lightToSurfaceAngle <= radians(lightUbo.spotLights[i].coneAngle)) {
             float attenuation = 1.0 / dot(directionToLight, directionToLight);
             vec3 radiance = attenuation * lightUbo.spotLights[i].color.rgb * lightUbo.spotLights[i].color.a;
 

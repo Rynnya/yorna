@@ -1,7 +1,7 @@
 #include <yorna/early_depth.hpp>
 
 #include <coffee/graphics/command_buffer.hpp>
-#include <coffee/objects/vertex.hpp>
+#include <coffee/graphics/vertex.hpp>
 
 namespace yorna {
 
@@ -32,7 +32,11 @@ namespace yorna {
         });
 
         pipeline = coffee::graphics::GraphicsPipeline::create(device, renderPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/early_depth.vert.spv"),
+            .vertexShader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/early_depth.vert.spv",
+                .entrypoint = "main"
+            }),
             .vertexPushConstants = {
                 .size = sizeof(glm::mat4)
             },
@@ -41,12 +45,12 @@ namespace yorna {
             },
             .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0,
-                .stride = sizeof(coffee::Vertex),
+                .stride = sizeof(coffee::graphics::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
                 .elements = { coffee::graphics::InputElement {
                     .location = 0U,
                     .format = VK_FORMAT_R32G32B32_SFLOAT,
-                    .offset = offsetof(coffee::Vertex, position),
+                    .offset = offsetof(coffee::graphics::Vertex, position),
                 }},
             }},
             .rasterizationInfo = {

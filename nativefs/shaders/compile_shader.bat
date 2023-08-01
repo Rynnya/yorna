@@ -7,7 +7,7 @@ if %1.==. (
     set fileToCompile=%1
 )
 
-C:\VulkanSDK\1.3.211.0\Bin\glslc.exe %fileToCompile% -g -O0 -o %fileToCompile%.spv
+C:\VulkanSDK\1.3.211.0\Bin\glslc.exe %fileToCompile% -o %fileToCompile%.spv
 
 if %errorlevel% equ 0 (
     echo Successfully compiled %fileToCompile%.spv

@@ -6,7 +6,7 @@ namespace yorna {
 
     // clang-format off
 
-    Model::Model(const coffee::graphics::DevicePtr& device, const coffee::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler)
+    Model::Model(const coffee::graphics::DevicePtr& device, const coffee::graphics::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler)
         : model { model }
         , device { device }
     {

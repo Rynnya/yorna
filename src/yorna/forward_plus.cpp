@@ -1,7 +1,7 @@
 #include <yorna/forward_plus.hpp>
 
 #include <coffee/graphics/command_buffer.hpp>
-#include <coffee/objects/vertex.hpp>
+#include <coffee/graphics/vertex.hpp>
 
 namespace yorna {
 
@@ -56,8 +56,16 @@ namespace yorna {
         });
 
         pipeline = coffee::graphics::GraphicsPipeline::create(device, renderPass, {
-            .vertexShader = assetManager->getShader(filesystem, "shaders/forward_plus.vert.spv"),
-            .fragmentShader = assetManager->getShader(filesystem, "shaders/forward_plus.frag.spv"),
+            .vertexShader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/forward_plus.vert.spv",
+                .entrypoint = "main"
+            }),
+            .fragmentShader = assetManager->loadShader({
+                .filesystem = filesystem,
+                .path = "shaders/forward_plus.frag.spv",
+                .entrypoint = "main"
+            }),
             .vertexPushConstants = {
                 .size = sizeof(RenderingPushConstants)
             },
@@ -74,9 +82,9 @@ namespace yorna {
             },
             .inputBindings = { coffee::graphics::InputBinding {
                 .binding = 0U,
-                .stride = sizeof(coffee::Vertex),
+                .stride = sizeof(coffee::graphics::Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-                .elements = coffee::Vertex::getElementDescriptions()
+                .elements = coffee::graphics::Vertex::getElementDescriptions()
             }},
             .rasterizationInfo = {
                 .cullMode = VK_CULL_MODE_BACK_BIT
@@ -168,10 +176,14 @@ namespace yorna {
                                                               VkClearValue { .depthStencil = { 0.0f, 0U } } };
 
         commandBuffer.beginRenderPass(renderPass, framebuffer, renderArea, clearValues.size(), clearValues.data());
-        commandBuffer.bindPipeline(pipeline);
-        commandBuffer.bindDescriptorSets(pipeline, descriptors[frameIndex]);
         commandBuffer.setViewport(viewport);
         commandBuffer.setScissor(renderArea);
+    }
+
+    void ForwardPlus::rebind(const coffee::graphics::CommandBuffer& commandBuffer) const noexcept
+    {
+        commandBuffer.bindPipeline(pipeline);
+        commandBuffer.bindDescriptorSets(pipeline, descriptors[frameIndex]);
     }
 
     void ForwardPlus::push(const coffee::graphics::CommandBuffer& commandBuffer, const glm::mat4& transform, const glm::mat4& modelNormal)

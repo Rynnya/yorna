@@ -14,7 +14,7 @@ int main()
     auto loopHandler = coffee::LoopHandler::create();
     auto window = coffee::graphics::Window::create(gpuDevice, {
         .extent = { .width = 1280, .height = 720, },
-        .presentMode = VK_PRESENT_MODE_FIFO_RELAXED_KHR,
+        .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
         .hiddenOnStart = true,
         .fullscreen = false,
     });
