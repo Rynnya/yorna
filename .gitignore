@@ -8,7 +8,10 @@ build/
 
 !nativefs/
 nativefs/*
+!nativefs/cube.cfa
+!nativefs/white_skybox.basis
 !nativefs/shaders/
+nativefs/shaders/*.spv
 
 # Precomputed filesystems (which weight a lot)
 *.fs
