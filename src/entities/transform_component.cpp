@@ -2,8 +2,8 @@
 
 #include <glm/gtc/epsilon.hpp>
 
-#include <utility>
 #include <glm/gtx/matrix_decompose.hpp>
+#include <utility>
 
 namespace yorna {
 

@@ -17,7 +17,13 @@ namespace yorna {
     constexpr float kDirectorySpacingSize = 96.0f;
     constexpr uint32_t kSpecialAffectedModelIndex = 0xFFFFFFFF;
 
-    Editor::Editor(const SharedInstance& instance, yorna::Yorna& gameHandle) noexcept : SharedInstance { instance }, gameHandle { gameHandle }
+    constexpr const char kCreateProjectDialog[] = "CreateProjectDialog";
+    constexpr const char kLoadProjectDialog[] = "LoadProjectDialog";
+
+    Editor::Editor(const SharedInstance& instance, Yorna& gameHandle) noexcept
+        : SharedInstance { instance }
+        , gameHandle { gameHandle }
+        , modelLoader { instance }
     {
         initializeLights();
         initializeMemoryHeaps();
@@ -33,6 +39,9 @@ namespace yorna {
         if (updateInformation.modelWasChanged && gizmo.affectedModel != nullptr) {
             gizmo.affectedModel->decompose(updateInformation.transformationMatrix);
         }
+
+        auto newModels = modelLoader.extract();
+        gameHandle.models.insert(gameHandle.models.end(), std::make_move_iterator(newModels.begin()), std::make_move_iterator(newModels.end()));
     }
 
     void Editor::render()
@@ -45,12 +54,12 @@ namespace yorna {
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu(localizeName(LocaleName::File), !projectInformation.dialog.IsOpened())) {
                 if (ImGui::MenuItem(localizeName(LocaleName::NewProject))) {
-                    projectInformation.dialog.OpenDialog("CreateProjectDialog", localizeName(LocaleName::SelectDirectory), nullptr, ".");
+                    projectInformation.dialog.OpenDialog(kCreateProjectDialog, localizeName(LocaleName::SelectDirectory), nullptr, ".");
                     projectInformation.loaded = true;
                 }
 
                 if (ImGui::MenuItem(localizeName(LocaleName::OpenProject))) {
-                    projectInformation.dialog.OpenDialog("LoadProjectDialog", localizeName(LocaleName::SelectCFPJFile), ".cfpj", ".");
+                    projectInformation.dialog.OpenDialog(kLoadProjectDialog, localizeName(LocaleName::SelectCFPJFile), ".cfpj", ".");
                 }
 
                 if (ImGui::MenuItem(localizeName(LocaleName::SaveProject))) {
@@ -116,7 +125,7 @@ namespace yorna {
 
         constexpr ImGuiWindowFlags kFileDialogFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
 
-        if (projectInformation.dialog.Display("LoadProjectDialog", kFileDialogFlags, { 800.0f, 450.0f })) {
+        if (projectInformation.dialog.Display(kLoadProjectDialog, kFileDialogFlags, { 800.0f, 450.0f })) {
             if (projectInformation.dialog.IsOk()) {
                 loadProject();
             }
@@ -659,7 +668,9 @@ namespace yorna {
                 ImGui::TreeNode(pointerID, hierachyComponent.tag.data(), hierachyComponent.tag.data() + hierachyComponent.tag.size(), flags);
 
             if (ImGui::BeginPopupContextItem(nullptr, ImGuiMouseButton_Right)) {
-                ImGui::MenuItem(hierarchyTypeToString(hierachyComponent.type).data(), nullptr, nullptr, false);
+                std::string objectType = "Type: " + std::string { hierarchyTypeToString(hierachyComponent.type) };
+
+                ImGui::MenuItem(objectType.data(), nullptr, nullptr, false);
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("New Folder")) {
@@ -818,8 +829,8 @@ namespace yorna {
 
         for (size_t index = 0; index < gameHandle.models.size(); index++) {
             auto& model = gameHandle.models[index];
-            auto& meshes = model->model->meshes;
-            auto& visibleMeshes = model->visibleMeshes;
+            auto& subMeshes = model->mesh->subMeshes;
+            auto& visibleSubMeshes = model->visibleSubMeshes;
 
             MousePickingPushConstants pushConstants {
                 .modelMatrix = model->transform.mat4(),
@@ -827,10 +838,10 @@ namespace yorna {
             };
 
             mousePickingCommandBuffer.pushConstants(gizmo.pipeline, VK_SHADER_STAGE_VERTEX_BIT, sizeof(pushConstants), &pushConstants);
-            mousePickingCommandBuffer.bindModel(model->model);
+            mousePickingCommandBuffer.bindMesh(model->mesh);
 
-            for (size_t meshID : visibleMeshes) {
-                mousePickingCommandBuffer.drawMesh(meshes[meshID]);
+            for (size_t meshID : visibleSubMeshes) {
+                mousePickingCommandBuffer.drawSubMesh(subMeshes[meshID]);
             }
         }
 

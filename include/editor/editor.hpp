@@ -1,6 +1,7 @@
 #ifndef YORNA_EDITOR
 #define YORNA_EDITOR
 
+#include <editor/components.hpp>
 #include <editor/entities.hpp>
 #include <editor/timestamps.hpp>
 #include <editor/viewports.hpp>
@@ -23,7 +24,7 @@ namespace yorna {
             glm::mat4 transformationMatrix { 1.0f };
         };
 
-        Editor(const SharedInstance& instance, yorna::Yorna& gameHandle) noexcept;
+        Editor(const SharedInstance& instance, Yorna& gameHandle) noexcept;
         ~Editor() noexcept = default;
 
         // Changes state in single-threaded mode so no race condition is done
@@ -55,6 +56,8 @@ namespace yorna {
         void boundViewportToGame(ImGuiViewport* viewport);
         void unboundViewportFromGame(ImGuiViewport* viewport);
 
+        void acquireModelIndex(entt::entity entity);
+        void releaseModelIndex(entt::entity entity);
         void acquirePointLightIndex(entt::entity entity);
         void releasePointLightIndex(entt::entity entity);
         void acquireSpotLightIndex(entt::entity entity);
@@ -72,6 +75,8 @@ namespace yorna {
         GizmoViewport gizmo {};
         SceneViewport scene {};
         AssetBrowserViewport assetBrowser {};
+
+        ModelLoader modelLoader;
 
         std::array<bool, Yorna::kMaxAmountOfPointLights> freePointLightIndices {};
         std::array<bool, Yorna::kMaxAmountOfSpotLights> freeSpotLightIndices {};

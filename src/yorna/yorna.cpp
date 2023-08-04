@@ -27,24 +27,24 @@ namespace yorna {
         createSamplers();
         createDescriptors();
         createSyncObjects();
-        loadModels();
+        checkForConfiguration();
 
-        std::random_device rngDevice {};
-        std::mt19937_64 rngEngine { rngDevice() };
+        // std::random_device rngDevice {};
+        // std::mt19937_64 rngEngine { rngDevice() };
 
-        std::uniform_real_distribution<float> positionDist { -15.0f, 15.0f };
-        std::uniform_real_distribution<float> heightDist { -3.0f, 12.0f };
-        std::uniform_real_distribution<float> colorDist { 0.3f, 0.8f };
+        // std::uniform_real_distribution<float> positionDist { -15.0f, 15.0f };
+        // std::uniform_real_distribution<float> heightDist { -3.0f, 12.0f };
+        // std::uniform_real_distribution<float> colorDist { 0.3f, 0.8f };
 
-        auto* pointLightsArray = pointLights->memory<PointLight*>();
+        // auto* pointLightsArray = pointLights->memory<PointLight*>();
 
-        for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
-            pointLightsArray[index] = {
-                .position = { positionDist(rngEngine), heightDist(rngEngine), positionDist(rngEngine) },
-                .radius = 2.0f,
-                .color = { colorDist(rngEngine),   colorDist(rngEngine),  colorDist(rngEngine)   },
-            };
-        }
+        // for (size_t index = 0; index < kMaxAmountOfPointLights; index++) {
+        //     pointLightsArray[index] = {
+        //         .position = { positionDist(rngEngine), heightDist(rngEngine), positionDist(rngEngine) },
+        //         .radius = 2.0f,
+        //         .color = { colorDist(rngEngine),   colorDist(rngEngine),  colorDist(rngEngine)   },
+        //     };
+        // }
     }
 
     Yorna::~Yorna() { device->waitDeviceIdle(); }
@@ -77,15 +77,15 @@ namespace yorna {
     void Yorna::cullMeshes()
     {
         for (auto& model : models) {
-            auto& meshes = model->model->meshes;
-            auto& visibleMeshes = model->visibleMeshes;
+            auto& subMeshes = model->mesh->subMeshes;
+            auto& visibleSubMeshes = model->visibleSubMeshes;
             auto transformationMatrix = model->transform.mat4();
 
-            visibleMeshes.clear();
+            visibleSubMeshes.clear();
 
-            for (size_t i = 0; i < meshes.size(); i++) {
-                if (camera.isInFrustum(transformationMatrix, meshes[i].aabb)) {
-                    visibleMeshes.push_back(i);
+            for (size_t i = 0; i < subMeshes.size(); i++) {
+                if (camera.isInFrustum(transformationMatrix, subMeshes[i].aabb)) {
+                    visibleSubMeshes.push_back(i);
                 }
             }
         }
@@ -96,12 +96,11 @@ namespace yorna {
         sunlightShadow.begin(commandBuffer);
 
         for (auto& model : models) {
-            auto& meshes = model->model->meshes;
-            auto& visibleMeshes = model->visibleMeshes;
+            auto& visibleSubMeshes = model->visibleSubMeshes;
 
             sunlightShadow.push(commandBuffer, model->transform.mat4());
-            commandBuffer.bindModel(model->model);
-            commandBuffer.drawModel(model->model);
+            commandBuffer.bindMesh(model->mesh);
+            commandBuffer.drawMesh(model->mesh);
         }
 
         sunlightShadow.end(commandBuffer);
@@ -109,14 +108,14 @@ namespace yorna {
         earlyDepth.begin(commandBuffer);
 
         for (auto& model : models) {
-            auto& meshes = model->model->meshes;
-            auto& visibleMeshes = model->visibleMeshes;
+            auto& subMeshes = model->mesh->subMeshes;
+            auto& visibleSubMeshes = model->visibleSubMeshes;
 
             earlyDepth.push(commandBuffer, model->transform.mat4());
-            commandBuffer.bindModel(model->model);
+            commandBuffer.bindMesh(model->mesh);
 
-            for (size_t meshID : visibleMeshes) {
-                commandBuffer.drawMesh(meshes[meshID]);
+            for (size_t meshID : visibleSubMeshes) {
+                commandBuffer.drawSubMesh(subMeshes[meshID]);
             }
         }
 
@@ -327,16 +326,16 @@ namespace yorna {
         forwardPlus.rebind(commandBuffer);
 
         for (auto& model : models) {
-            auto& meshes = model->model->meshes;
-            auto& visibleMeshes = model->visibleMeshes;
+            auto& subMeshes = model->mesh->subMeshes;
+            auto& visibleSubMeshes = model->visibleSubMeshes;
             auto transformationMatrix = model->transform.mat4();
 
             forwardPlus.push(commandBuffer, transformationMatrix, model->transform.normal());
-            commandBuffer.bindModel(model->model);
+            commandBuffer.bindMesh(model->mesh);
 
-            for (size_t meshID : visibleMeshes) {
+            for (size_t meshID : visibleSubMeshes) {
                 forwardPlus.bind(commandBuffer, model->descriptors[meshID]);
-                commandBuffer.drawMesh(meshes[meshID]);
+                commandBuffer.drawSubMesh(subMeshes[meshID]);
             }
         }
 
@@ -526,16 +525,33 @@ namespace yorna {
         }
     }
 
-    void Yorna::loadModels()
+    void Yorna::checkForConfiguration()
     {
-        coffee::ModelLoadingInfo loadingInfo { filesystem };
-        loadingInfo.path = "sponza_scene.cfa";
+        if (filesystem->contains("startup.cfl")) {
+            // This information will be used only once, on game launch, so we use it directly instead of loading it through asset manager
+            performLoading(filesystem->getContent("startup.cfl"));
+        }
+    }
 
-        models.push_back(std::make_unique<Model>(device, assetManager->loadModel(loadingInfo), textureSampler));
-        models.back()->transform.scale *= 0.01f;
+    void Yorna::performLoading(const std::vector<uint8_t>& configurationBytes)
+    {
+        constexpr uint8_t headerMagic[4] = { 0x2A, 0x81, 0xCF, 0x1D };
+        coffee::utils::ReaderStream stream { configurationBytes };
 
-        viewerObject.translation.z = -1.5f;
-        viewerObject.translation.y = 1.0f;
+        if (std::memcmp(stream.readBuffer<uint8_t, sizeof(headerMagic)>(), headerMagic, sizeof(headerMagic)) != 0) {
+            // This is not a configuration file or it's invalid
+            return;
+        }
+
+        // TODO: Perform loading
+        // NOTE: This loading process must be same as loading of scene, except it was compressed into binary file
+        // For editor loading use create new project/select cfpj file
+
+        //coffee::ModelLoadingInfo loadingInfo { filesystem };
+        //loadingInfo.path = "sponza_scene.cfa";
+
+        //models.push_back(std::make_unique<Model>(device, assetManager->loadModel(loadingInfo), textureSampler));
+        //models.back()->transform.scale *= 0.01f;
     }
 
     // clang-format on

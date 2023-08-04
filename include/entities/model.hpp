@@ -9,7 +9,7 @@ namespace yorna {
 
     // TODO: Made it compatable with entt
 
-    class MeshInformation {
+    class SubMeshInformation {
     public:
         glm::vec3 diffuseColor {};
         float metallicFactor = 0.0f;
@@ -18,18 +18,18 @@ namespace yorna {
         coffee::TextureType textureFlags = coffee::TextureType::None;
     };
 
-    class Model {
+    class Model : coffee::NonMoveable {
     public:
-        Model(const coffee::graphics::DevicePtr& device, const coffee::graphics::ModelPtr& model, const coffee::graphics::SamplerPtr& textureSampler);
+        Model(const coffee::graphics::DevicePtr& device, const coffee::graphics::MeshPtr& mesh, const coffee::graphics::SamplerPtr& textureSampler);
 
         void updateMeshesInformation();
 
-        coffee::graphics::ModelPtr model {};
+        coffee::graphics::MeshPtr mesh {};
         TransformComponent transform {};
-        std::vector<size_t> visibleMeshes {};
+        std::vector<size_t> visibleSubMeshes {};
 
-        std::vector<MeshInformation> meshesInformation {};
-        std::vector<coffee::graphics::BufferPtr> meshesInformationBuffers {};
+        std::vector<SubMeshInformation> subMeshesInformation {};
+        std::vector<coffee::graphics::BufferPtr> subMeshesInformationBuffers {};
 
         coffee::graphics::DescriptorLayoutPtr layout {};
         std::vector<coffee::graphics::DescriptorSetPtr> descriptors {};
@@ -38,7 +38,7 @@ namespace yorna {
         const coffee::graphics::DevicePtr& device;
     };
 
-    using ModelPtr = std::unique_ptr<Model>;
+    using ModelPtr = std::shared_ptr<Model>;
 
 } // namespace yorna
 

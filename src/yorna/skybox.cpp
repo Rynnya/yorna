@@ -10,7 +10,7 @@ namespace yorna {
         : SharedInstance { instance }
         , earlyDepth { earlyDepth }
     {
-        cubeModel = assetManager->loadModel({
+        cubeMesh = assetManager->loadMesh({
             .filesystem = filesystem,
             .path = "cube.cfa"
         });
@@ -103,8 +103,9 @@ namespace yorna {
     {
         commandBuffer.bindPipeline(pipeline);
         commandBuffer.bindDescriptorSets(pipeline, descriptors[earlyDepth.currentFrame()]);
-        commandBuffer.bindModel(cubeModel);
-        commandBuffer.drawModel(cubeModel);
+
+        commandBuffer.bindMesh(cubeMesh);
+        commandBuffer.drawMesh(cubeMesh);
     }
 
 } // namespace yorna

@@ -27,7 +27,7 @@ namespace yorna {
 
         std::shared_ptr<coffee::graphics::BufferPtr[coffee::graphics::Device::kMaxOperationsInFlight]> mvpUniformBuffers;
     };
-    
+
     template <typename T>
     using PerFlightFrame = std::array<T, coffee::graphics::Device::kMaxOperationsInFlight>;
 

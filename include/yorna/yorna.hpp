@@ -46,6 +46,7 @@ namespace yorna {
 
         coffee::graphics::DescriptorLayoutPtr outputLayout {};
         coffee::graphics::DescriptorSetPtr outputDescriptor {};
+        coffee::graphics::SamplerPtr textureSampler {};
 
         Camera camera {};
         TransformComponent viewerObject {};
@@ -65,7 +66,9 @@ namespace yorna {
         void createSamplers();
         void createDescriptors();
         void createSyncObjects();
-        void loadModels();
+
+        void checkForConfiguration();
+        void performLoading(const std::vector<uint8_t>& configurationBytes);
 
         // Must be recreated when window resizes or when present mode changes
         void updateDescriptors();
@@ -96,7 +99,6 @@ namespace yorna {
         PerFlightFrame<coffee::graphics::SubmitSemaphores> submitLightCullingSemaphores;
         PerFlightFrame<coffee::graphics::SubmitSemaphores> submitRenderingSemaphores;
 
-        coffee::graphics::SamplerPtr textureSampler;
         coffee::graphics::SamplerPtr outputSampler;
 
         uint32_t frameIndex = 0;

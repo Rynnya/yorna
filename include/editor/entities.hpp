@@ -5,12 +5,7 @@
 
 namespace yorna {
 
-    enum class HierarchyType : uint32_t {
-        Folder = 0,
-        Model = 1,
-        PointLight = 2,
-        SpotLight = 3
-    };
+    enum class HierarchyType : uint32_t { Folder = 0, Model = 1, PointLight = 2, SpotLight = 3 };
 
     // Dummy structure to indicate that this entity is in root
     struct EntityRoot {};
@@ -23,6 +18,10 @@ namespace yorna {
 
         HierarchyType type {};
         std::string tag {};
+    };
+
+    struct ModelIndex {
+        uint32_t index = 0;
     };
 
     struct PointLightIndex {

@@ -4,7 +4,7 @@
 #include <yorna/early_depth.hpp>
 #include <yorna/forward_plus.hpp>
 
-#include <coffee/graphics/model.hpp>
+#include <coffee/graphics/mesh.hpp>
 
 namespace yorna {
 
@@ -21,7 +21,7 @@ namespace yorna {
         void perform(const coffee::graphics::CommandBuffer& commandBuffer);
 
     private:
-        coffee::graphics::ModelPtr cubeModel;
+        coffee::graphics::MeshPtr cubeMesh;
         coffee::graphics::ImagePtr cubeImage;
         coffee::graphics::ImageViewPtr cubeImageView;
         coffee::graphics::SamplerPtr sampler;
