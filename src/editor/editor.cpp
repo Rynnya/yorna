@@ -8,7 +8,7 @@
 #include <coffee/graphics/vertex.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include <Imguizmo.h>
+#include <ImGuizmo.h>
 #include <json.hpp>
 
 namespace yorna {
@@ -134,7 +134,7 @@ namespace yorna {
         }
 
         if (hierarchy.active) {
-            std::string sceneHierarchyName = std::format("{}###HierarchyViewport", localizeName(LocaleName::SceneHierarchy));
+            std::string sceneHierarchyName = fmt::format("{}###HierarchyViewport", localizeName(LocaleName::SceneHierarchy));
             ImGui::Begin(sceneHierarchyName.data(), &hierarchy.active);
 
             if (ImGui::BeginPopupContextWindow("SceneHierarchyRightClick", ImGuiPopupFlags_MouseButtonRight)) {
@@ -167,7 +167,7 @@ namespace yorna {
         }
 
         if (gizmo.active) {
-            std::string guizmoViewportName = std::format("{}###GuizmoViewport", localizeName(LocaleName::GizmoViewport));
+            std::string guizmoViewportName = fmt::format("{}###GuizmoViewport", localizeName(LocaleName::GizmoViewport));
             ImGui::Begin(guizmoViewportName.data(), &gizmo.active);
 
             if (gizmo.affectedModel != nullptr) {
@@ -196,7 +196,7 @@ namespace yorna {
         }
 
         if (scene.active) {
-            std::string sceneViewportName = std::format("{}###SceneViewport", localizeName(LocaleName::SceneViewport));
+            std::string sceneViewportName = fmt::format("{}###SceneViewport", localizeName(LocaleName::SceneViewport));
             ImGui::Begin(sceneViewportName.data(), &scene.active);
 
             ImGui::Checkbox(localizeName(LocaleName::KeepAspectRatio), &scene.keepAspectRatio);
@@ -271,7 +271,7 @@ namespace yorna {
         }
 
         if (assetBrowser.active) {
-            std::string assetViewportName = std::format("{}###AssetBrowser", localizeName(LocaleName::AssetBrowser));
+            std::string assetViewportName = fmt::format("{}###AssetBrowser", localizeName(LocaleName::AssetBrowser));
             ImGui::Begin(assetViewportName.data(), &assetBrowser.active);
 
             if (assetBrowser.updateRequired) {
@@ -949,7 +949,7 @@ namespace yorna {
     {
         constexpr uint32_t kGreenColor = IM_COL32(0, 255, 0, 255);
 
-        const std::string formattedTime = std::vformat(name, std::make_format_args(calculateAverage(buffer)));
+        const std::string formattedTime = fmt::vformat(name, fmt::make_format_args(calculateAverage(buffer)));
         ImGui::GetWindowDrawList()
             ->AddText(scene.framerateTextPosition, kGreenColor, formattedTime.data(), formattedTime.data() + formattedTime.size());
 
@@ -968,7 +968,7 @@ namespace yorna {
             const float budgetInMB = budget.budget / kBytesToMegabytes;
             scene.framerateTextPosition.y += 15;
 
-            std::string formatted = std::vformat("{}: {:.2f}/{:.2f} MB ({:.2f}%)", std::make_format_args(name, usageInMB, budgetInMB, percentage));
+            std::string formatted = fmt::format("{}: {:.2f}/{:.2f} MB ({:.2f}%)", name, usageInMB, budgetInMB, percentage);
             ImGui::GetWindowDrawList()->AddText(scene.framerateTextPosition, kGreenColor, formatted.data(), formatted.data() + formatted.size());
         }
     }

@@ -11,7 +11,7 @@
 #include <coffee/graphics/render_pass.hpp>
 #include <coffee/interfaces/filesystem.hpp>
 
-#include <Imguizmo.h>
+#include <ImGuizmo.h>
 #include <imgui_file_dialog.h>
 
 #include <filesystem>

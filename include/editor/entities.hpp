@@ -1,7 +1,7 @@
 #ifndef YORNA_EDITOR_ENTITIES
 #define YORNA_EDITOR_ENTITIES
 
-#include <entt.hpp>
+#include <entt/entt.hpp>
 
 namespace yorna {
 

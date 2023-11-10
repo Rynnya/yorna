@@ -4,7 +4,7 @@
 #include <coffee/graphics/window.hpp>
 #include <coffee/interfaces/loop_handler.hpp>
 
-#include <entt.hpp>
+#include <entt/entt.hpp>
 #include <imgui.h>
 
 namespace yorna {

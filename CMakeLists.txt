@@ -1,13 +1,21 @@
 cmake_minimum_required(VERSION 3.11...3.25)
 
-set(PROJECT_NAME coffee-editor)
-set(SHADERS_PROJECT shaders-recompile)
+set(PROJECT_NAME coffee_editor)
+set(SHADERS_PROJECT shaders_recompile)
 project(${PROJECT_NAME} CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 set(SHADERS_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/nativefs/shaders")
+
+if (WIN32)
+    set(SHADERS_COMPILE_SCRIPT "compile_shader.bat")
+    set(COMMAND_EXECUTOR "cmd")
+else()
+    set(SHADERS_COMPILE_SCRIPT "compile_shader.sh")
+    set(COMMAND_EXECUTOR "bash")
+endif()
 
 file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog.cpp")
 file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog/imgui_file_dialog.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/imgui_file_dialog.h")
@@ -27,7 +35,7 @@ file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguizmo/ImSequencer.h" "${CMAK
 file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguizmo/ImZoomSlider.h" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/ImZoomSlider.h")
 
 file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui-cmake.patch" "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui/CMakeLists.txt")
-execute_process(COMMAND cmd /C "cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch" OUTPUT_QUIET ERROR_QUIET)
+execute_process(COMMAND ${COMMAND_EXECUTOR} /C "cd ${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui && git apply ../imgui-config.patch")
 
 if(MSVC)
     add_compile_options(/GR-)
@@ -38,6 +46,7 @@ add_compile_definitions(GLM_FORCE_DEPTH_ZERO_TO_ONE)
 add_compile_definitions(GLM_FORCE_LEFT_HANDED)
 
 add_subdirectory(engine)
+add_subdirectory(libs/entt)
 add_subdirectory(libs/imgui)
 
 find_package(Vulkan)
@@ -53,15 +62,14 @@ file(GLOB_RECURSE SOURCES
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/libs/entt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/libs/entt/single_include"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/imgui"
-    "${CMAKE_CURRENT_SOURCE_DIR}/libs/imguifiledialog"
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/nlohmann")
-target_link_libraries(${PROJECT_NAME} PRIVATE coffee-engine imgui)
+target_link_libraries(${PROJECT_NAME} PRIVATE coffee_engine imgui)
 
 file(GLOB_RECURSE SHADERS_SOURCES "${SHADERS_FOLDER}/*.vert" "${SHADERS_FOLDER}/*.frag" "${SHADERS_FOLDER}/*.comp")
 foreach(SOURCE IN ITEMS ${SHADERS_SOURCES})
-    add_custom_command(OUTPUT "${SOURCE}.spv" COMMAND ${SHADERS_FOLDER}/compile_shader.bat "${SOURCE}" DEPENDS "${SOURCE}" VERBATIM)
+    add_custom_command(OUTPUT "${SOURCE}.spv" COMMAND ${SHADERS_FOLDER}/${SHADERS_COMPILE_SCRIPT} "${SOURCE}" DEPENDS "${SOURCE}" VERBATIM)
     list(APPEND DEPENDENCIES_SHADERS "${SOURCE}.spv")
 endforeach()
 add_custom_target(${SHADERS_PROJECT} DEPENDS ${DEPENDENCIES_SHADERS})
@@ -80,7 +88,7 @@ if(MSVC)
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT "${PROJECT_NAME}")
-    
+
     foreach(SOURCE IN ITEMS ${SOURCES})
     	get_filename_component(SOURCE_PATH "${SOURCE}" PATH)
     	string(REPLACE "${CMAKE_SOURCE_DIR}" "" GROUP_PATH "${SOURCE_PATH}")

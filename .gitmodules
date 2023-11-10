@@ -4,5 +4,8 @@
 [submodule "libs/imgui"]
 	path = libs/imgui
 	url = https://github.com/ocornut/imgui
-    branch = docking
+	branch = docking
 	ignore = dirty
+[submodule "libs/entt"]
+	path = libs/entt
+	url = https://github.com/skypjack/entt

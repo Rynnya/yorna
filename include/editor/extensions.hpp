@@ -49,7 +49,8 @@ namespace ImGui {
         ImVec2 currentCursorPosition = GetCursorScreenPos();
         ImVec2 textCursorPosition = { currentCursorPosition.x + textOffset.x, currentCursorPosition.y + textOffset.y };
 
-        bool pressed = ImageButton(imageID, textureID, size, flags);
+        // TODO: Replace flags with something else because in newer versions of ImGui such function was removed
+        bool pressed = ImageButton(imageID, textureID, size); // flags was last argument here
         window->DrawList->AddText(textCursorPosition, IM_COL32(textColor.x, textColor.y, textColor.z, textColor.w), text);
 
         return pressed;

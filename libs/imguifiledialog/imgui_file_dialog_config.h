@@ -42,6 +42,7 @@
 //#define IMGUI_BUTTON ImGui::Button
 
 #include <array>
+#include <cstddef>
 
 #include "imgui_file_dialog_def.h"
 
